@@ -98,8 +98,31 @@ class ServicioPedidos with ChangeNotifier {
     }
   }
 
-  // En ServicioPedidos, modifica los métodos para que actualicen correctamente:
+  // MÉTODO NUEVO: Obtener pedido por ID
+  Pedido? obtenerPedidoPorId(String id) {
+    try {
+      // Buscar primero en mis pedidos
+      final pedidoEnMisPedidos = _misPedidos.firstWhere(
+        (p) => p.id == id,
+        orElse: () => Pedido.vacio(),
+      );
 
+      // Si no se encuentra en mis pedidos, buscar en todos los pedidos
+      if (pedidoEnMisPedidos.id.isEmpty) {
+        return _pedidos.firstWhere(
+          (p) => p.id == id,
+          orElse: () => Pedido.vacio(),
+        );
+      }
+
+      return pedidoEnMisPedidos;
+    } catch (e) {
+      print('❌ Error obteniendo pedido por ID: $e');
+      return null;
+    }
+  }
+
+  // ASIGNAR CONDUCTOR - Cambia de "Pendiente" a "Repartidor Asignado"
   Future<bool> asignarConductor(String idPedido) async {
     try {
       final exito = await _apiServicios.aceptarPedidoConductor(idPedido);
@@ -132,6 +155,7 @@ class ServicioPedidos with ChangeNotifier {
     }
   }
 
+  // ENVIAR PEDIDO - Cambia de "Repartidor Asignado" a "En camino"
   Future<bool> enviarPedido(String idPedido) async {
     try {
       final exito = await _apiServicios.recogerPedido(idPedido);
@@ -159,6 +183,7 @@ class ServicioPedidos with ChangeNotifier {
     }
   }
 
+  // ENTREGAR PEDIDO - Cambia de "En camino" a "Entregado"
   Future<bool> entregarPedido(String idPedido) async {
     try {
       final exito = await _apiServicios.entregarPedidoConductor(idPedido);
@@ -169,7 +194,10 @@ class ServicioPedidos with ChangeNotifier {
           _misPedidos[indice] = _misPedidos[indice].copyWith(
             estado: 'Entregado',
           );
+          
+          // Forzar actualización
           obtenerMisPedidos();
+          
           notifyListeners();
         }
         return true;
@@ -183,28 +211,44 @@ class ServicioPedidos with ChangeNotifier {
     }
   }
 
+  // LLEGAR DESTINO - Método opcional para marcar llegada al destino
   Future<bool> llegarDestino(String idPedido) async {
-  try {
-    // Aquí debes crear el endpoint correspondiente en tu API
-    final exito = await _apiServicios.llegarDestino(idPedido);
-    if (exito) {
-      final indice = _misPedidos.indexWhere((p) => p.id == idPedido);
-      if (indice != -1) {
-        _misPedidos[indice] = _misPedidos[indice].copyWith(estado: 'En destino');
-        
-        // Forzar actualización
-        obtenerMisPedidos();
-        
-        notifyListeners();
+    try {
+      // Si tienes este endpoint en tu API, úsalo. Si no, puedes eliminarlo.
+      final exito = await _apiServicios.llegarDestino(idPedido);
+      if (exito) {
+        final indice = _misPedidos.indexWhere((p) => p.id == idPedido);
+        if (indice != -1) {
+          _misPedidos[indice] = _misPedidos[indice].copyWith(
+            estado: 'En destino',
+          );
+
+          // Forzar actualización
+          obtenerMisPedidos();
+
+          notifyListeners();
+        }
+        return true;
       }
-      return true;
+      return false;
+    } catch (error) {
+      print('❌ Error al marcar como llegado a destino: $error');
+      _ultimoError = 'Error al marcar como llegado a destino: $error';
+      notifyListeners();
+      return false;
     }
-    return false;
-  } catch (error) {
-    print('❌ Error al marcar como llegado a destino: $error');
-    _ultimoError = 'Error al marcar como llegado a destino: $error';
-    notifyListeners();
-    return false;
   }
-}
+
+  // MÉTODO PARA LIMPIAR ERRORES
+  void limpiarError() {
+    _ultimoError = null;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _timerSincronizacion?.cancel();
+    _timerUbicacion?.cancel();
+    super.dispose();
+  }
 }

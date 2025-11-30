@@ -23,6 +23,19 @@ class Pedido {
     required this.estaCalificado,
   });
 
+  factory Pedido.vacio() {
+    return Pedido(
+      id: '',
+      items: [],
+      total: 0,
+      direccion: '',
+      estado: '',
+      fecha: DateTime.now(),
+      moneda: 'Bs',
+      metodoPago: '',
+      estaCalificado: false,
+    );
+  }
   factory Pedido.desdeJson(Map<String, dynamic> json) {
     // Manejar el total que puede venir como String o num
     double totalParseado = 0.0;
@@ -39,7 +52,9 @@ class Pedido {
       total: totalParseado,
       items: json['items'] is List ? json['items'] : [],
       direccion: json['address']?.toString() ?? 'Dirección no especificada',
-      ubicacion: json['location'] is Map ? Map<String, dynamic>.from(json['location']) : null,
+      ubicacion: json['location'] is Map
+          ? Map<String, dynamic>.from(json['location'])
+          : null,
       metodoPago: json['paymentMethod']?.toString() ?? 'Efectivo',
       fecha: _parsearFecha(json['date']?.toString(), json['date_ts']),
       estado: json['status']?.toString() ?? 'Pendiente',
@@ -56,10 +71,12 @@ class Pedido {
         print('Error parseando fecha: $e');
       }
     }
-    
+
     if (timestamp != null) {
       try {
-        final ts = timestamp is int ? timestamp : int.tryParse(timestamp.toString());
+        final ts = timestamp is int
+            ? timestamp
+            : int.tryParse(timestamp.toString());
         if (ts != null) {
           return DateTime.fromMillisecondsSinceEpoch(ts);
         }
@@ -67,14 +84,11 @@ class Pedido {
         print('Error parseando timestamp: $e');
       }
     }
-    
+
     return DateTime.now();
   }
 
-  Pedido copyWith({
-    String? estado,
-    bool? estaCalificado,
-  }) {
+  Pedido copyWith({String? estado, bool? estaCalificado}) {
     return Pedido(
       id: id,
       total: total,

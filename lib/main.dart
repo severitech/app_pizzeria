@@ -72,7 +72,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       builder: (context, servicioPedidos, child) {
         // Si hay pedidos en "Mis Pedidos", usar el primero
         if (servicioPedidos.misPedidos.isNotEmpty) {
-          return PantallaMapa(pedido: servicioPedidos.misPedidos.first);
+          // Pasar el ID del pedido requerido por PantallaMapa
+          return PantallaMapa(pedidoId: servicioPedidos.misPedidos.first.id);
         }
         
         // Si no hay pedidos, mostrar mensaje o mapa vacío

@@ -770,7 +770,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          PantallaMapa(pedido: pedido),
+                                          PantallaMapa(pedidoId: pedido.id),
                                     ),
                                   );
                                 },
