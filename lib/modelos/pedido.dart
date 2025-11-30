@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class Pedido {
   final String id;
   final double total;
@@ -26,9 +24,19 @@ class Pedido {
   });
 
   factory Pedido.desdeJson(Map<String, dynamic> json) {
+    // Manejar el total que puede venir como String o num
+    double totalParseado = 0.0;
+    if (json['total'] != null) {
+      if (json['total'] is String) {
+        totalParseado = double.tryParse(json['total']) ?? 0.0;
+      } else if (json['total'] is num) {
+        totalParseado = (json['total'] as num).toDouble();
+      }
+    }
+
     return Pedido(
-      id: json['id']?.toString() ?? '',
-      total: (json['total'] as num?)?.toDouble() ?? 0.0,
+      id: json['id']?.toString() ?? 'Sin ID',
+      total: totalParseado,
       items: json['items'] is List ? json['items'] : [],
       direccion: json['address']?.toString() ?? 'Dirección no especificada',
       ubicacion: json['location'] is Map ? Map<String, dynamic>.from(json['location']) : null,
@@ -80,47 +88,4 @@ class Pedido {
       estaCalificado: estaCalificado ?? this.estaCalificado,
     );
   }
-
-  String get estadoDisplay {
-    switch (estado) {
-      case 'Pendiente':
-        return '🕒 Pendiente';
-      case 'Confirmado':
-        return '✅ Confirmado';
-      case 'En preparación':
-        return '👨‍🍳 En preparación';
-      case 'En camino':
-        return '🛵 En camino';
-      case 'Entregado':
-        return '🎉 Entregado';
-      case 'Cancelado':
-        return '❌ Cancelado';
-      default:
-        return estado;
-    }
-  }
-
-  Color get colorEstado {
-    switch (estado) {
-      case 'Pendiente':
-        return Colors.orange;
-      case 'Confirmado':
-        return Colors.blue;
-      case 'En preparación':
-        return Colors.purple;
-      case 'En camino':
-        return Colors.green;
-      case 'Entregado':
-        return Colors.grey;
-      case 'Cancelado':
-        return Colors.red;
-      default:
-        return Colors.black;
-    }
-  }
-
-  bool get sePuedeAceptar => estado == 'Pendiente';
-  bool get sePuedePreparar => estado == 'Confirmado';
-  bool get sePuedeEnviar => estado == 'En preparación';
-  bool get sePuedeEntregar => estado == 'En camino';
 }
