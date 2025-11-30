@@ -40,15 +40,12 @@ class PantallaPrincipal extends StatefulWidget {
 class _PantallaPrincipalState extends State<PantallaPrincipal> {
   int _indicePagina = 0;
 
-  final List<Widget> _paginas = [
-    PantallaPedidos(), // Quitar const
-    PantallaMapa(),    // Quitar const
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _paginas[_indicePagina],
+      body: _indicePagina == 0 
+          ?  PantallaPedidos()
+          : _buildPantallaMapa(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indicePagina,
         onTap: (index) {
@@ -66,6 +63,48 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             label: 'Mapa',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPantallaMapa() {
+    return Consumer<ServicioPedidos>(
+      builder: (context, servicioPedidos, child) {
+        // Si hay pedidos en "Mis Pedidos", usar el primero
+        if (servicioPedidos.misPedidos.isNotEmpty) {
+          return PantallaMapa(pedido: servicioPedidos.misPedidos.first);
+        }
+        
+        // Si no hay pedidos, mostrar mensaje o mapa vacío
+        return _buildMapaVacio();
+      },
+    );
+  }
+
+  Widget _buildMapaVacio() {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mapa'),
+        backgroundColor: const Color(0xFF667eea),
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.map_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'No hay pedidos activos',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Acepta un pedido para verlo en el mapa',
+              style: TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

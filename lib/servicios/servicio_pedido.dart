@@ -182,4 +182,29 @@ class ServicioPedidos with ChangeNotifier {
       return false;
     }
   }
+
+  Future<bool> llegarDestino(String idPedido) async {
+  try {
+    // Aquí debes crear el endpoint correspondiente en tu API
+    final exito = await _apiServicios.llegarDestino(idPedido);
+    if (exito) {
+      final indice = _misPedidos.indexWhere((p) => p.id == idPedido);
+      if (indice != -1) {
+        _misPedidos[indice] = _misPedidos[indice].copyWith(estado: 'En destino');
+        
+        // Forzar actualización
+        obtenerMisPedidos();
+        
+        notifyListeners();
+      }
+      return true;
+    }
+    return false;
+  } catch (error) {
+    print('❌ Error al marcar como llegado a destino: $error');
+    _ultimoError = 'Error al marcar como llegado a destino: $error';
+    notifyListeners();
+    return false;
+  }
+}
 }

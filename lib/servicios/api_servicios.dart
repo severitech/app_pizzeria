@@ -4,8 +4,7 @@ import 'package:http/http.dart' as http;
 class ApiServicios {
   static const String _baseUrl = 'https://bottelegramihc-production.up.railway.app';
   
-  // ID del conductor (deberías obtenerlo del login o configuración)
-  static const String _driverId = 'D1'; // Cambiar según tu sistema
+  static const String _driverId = 'D1'; 
   
   static final ApiServicios _instancia = ApiServicios._internal();
   factory ApiServicios() => _instancia;
@@ -69,8 +68,6 @@ class ApiServicios {
         'driver_id': _driverId
       };
 
-      print('🔄 Aceptando pedido: $_baseUrl/driver/accept');
-      print('📤 Payload: $payload');
 
       final respuesta = await http.post(
         Uri.parse('$_baseUrl/driver/accept'),
@@ -81,9 +78,7 @@ class ApiServicios {
         body: json.encode(payload),
       );
 
-      print('📡 Respuesta del servidor: ${respuesta.statusCode}');
-      print('📄 Body de respuesta: ${respuesta.body}');
-      
+  
       if (respuesta.statusCode == 200) {
         print('✅ Pedido aceptado exitosamente');
         return true;
@@ -96,6 +91,38 @@ class ApiServicios {
       return false;
     }
   }
+
+  Future<bool> llegarDestino(String orderId) async {
+    try {
+      final payload = {
+        'order_id': orderId,
+        'driver_id': _driverId
+      };
+
+
+      final respuesta = await http.post(
+        Uri.parse('$_baseUrl/driver/arrive'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(payload),
+      );
+
+  
+      if (respuesta.statusCode == 200) {
+        print('✅ Pedido aceptado exitosamente');
+        return true;
+      } else {
+        print('❌ Error del servidor: ${respuesta.statusCode}');
+        return false;
+      }
+    } catch (error) {
+      print('❌ Error al aceptar pedido: $error');
+      return false;
+    }
+  }
+
 
   // ENDPOINT ESPECÍFICO PARA CONDUCTORES: Recoger pedido (marcar como "En camino")
   Future<bool> recogerPedido(String orderId) async {
