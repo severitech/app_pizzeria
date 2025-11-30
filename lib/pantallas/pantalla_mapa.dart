@@ -2,54 +2,69 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
+import '../modelos/pedido.dart';
 
 class PantallaMapa extends StatefulWidget {
+  final Pedido? pedido;
+
+  const PantallaMapa({Key? key, this.pedido}) : super(key: key);
+
   @override
   State<PantallaMapa> createState() => _PantallaMapaState();
 }
 
 class _PantallaMapaState extends State<PantallaMapa> {
-  LatLng puntoCliente = LatLng(-17.7900, -63.1700);
-  LatLng puntoDelivery = LatLng(-17.8000, -63.1600);
+  LatLng? puntoCliente;
+  LatLng? puntoDelivery;
   LatLng? ubicacionActual;
   final Location _location = Location();
   MapController mapController = MapController();
   bool _isLoading = true;
-  String _selectedTileLayer = 'openstreetmap'; // Por defecto
+  String _selectedTileLayer = 'openstreetmap';
 
-  // Lista de proveedores de mapas
   final List<Map<String, String>> _tileProviders = [
-    // {
-    //   'name': 'OpenStreetMap',
-    //   'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    //   'subdomains': 'a,b,c',
-    // },
     {
       'name': 'CartoDB',
       'url': 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
       'subdomains': 'a,b,c,d',
     },
-    // {
-    //   'name': 'Stamen Terrain',
-    //   'url': 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png',
-    //   'subdomains': '',
-    // },
-    // {
-    //   'name': 'Stamen Watercolor',
-    //   'url': 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg',
-    //   'subdomains': '',
-    // },
-    // {
-    //   'name': 'OpenTopoMap',
-    //   'url': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    //   'subdomains': 'a,b,c',
-    // },
+    {
+      'name': 'OpenStreetMap',
+      'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      'subdomains': 'a,b,c',
+    },
+    {
+      'name': 'Stamen Toner',
+      'url': 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',
+      'subdomains': 'a,b,c,d',
+    },
+    {
+      'name': 'Stamen Watercolor',
+      'url': 'https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
+      'subdomains': 'a,b,c,d',
+    },
   ];
 
   @override
   void initState() {
     super.initState();
+    _inicializarUbicaciones();
     _obtenerUbicacionActual();
+  }
+
+  void _inicializarUbicaciones() {
+    // Usar ubicación del pedido si está disponible
+    if (widget.pedido?.ubicacion != null) {
+      final ubicacion = widget.pedido!.ubicacion!;
+      puntoCliente = LatLng(
+        (ubicacion['latitude'] as num?)?.toDouble() ?? -17.7900,
+        (ubicacion['longitude'] as num?)?.toDouble() ?? -63.1700,
+      );
+    } else {
+      puntoCliente = const LatLng(-17.7900, -63.1700);
+    }
+    
+    puntoDelivery = const LatLng(-17.8000, -63.1600);
   }
 
   Future<void> _obtenerUbicacionActual() async {
@@ -86,17 +101,43 @@ class _PantallaMapaState extends State<PantallaMapa> {
   void _centrarEnDriver() {
     if (ubicacionActual != null) {
       mapController.move(ubicacionActual!, 16);
+    } else if (puntoDelivery != null) {
+      mapController.move(puntoDelivery!, 16);
     }
   }
 
   void _centrarEnCliente() {
-    mapController.move(puntoCliente, 16);
+    if (puntoCliente != null) {
+      mapController.move(puntoCliente!, 16);
+    }
   }
 
   void _mostrarAmbos() {
-    final lat = (puntoCliente.latitude + (ubicacionActual?.latitude ?? puntoDelivery.latitude)) / 2;
-    final lng = (puntoCliente.longitude + (ubicacionActual?.longitude ?? puntoDelivery.longitude)) / 2;
-    mapController.move(LatLng(lat, lng), 14);
+    final puntos = <LatLng>[];
+    if (puntoCliente != null) puntos.add(puntoCliente!);
+    if (ubicacionActual != null) {
+      puntos.add(ubicacionActual!);
+    } else if (puntoDelivery != null) {
+      puntos.add(puntoDelivery!);
+    }
+
+    if (puntos.length >= 2) {
+      double latMin = puntos[0].latitude;
+      double latMax = puntos[0].latitude;
+      double lngMin = puntos[0].longitude;
+      double lngMax = puntos[0].longitude;
+
+      for (final punto in puntos) {
+        latMin = punto.latitude < latMin ? punto.latitude : latMin;
+        latMax = punto.latitude > latMax ? punto.latitude : latMax;
+        lngMin = punto.longitude < lngMin ? punto.longitude : lngMin;
+        lngMax = punto.longitude > lngMax ? punto.longitude : lngMax;
+      }
+
+      final lat = (latMin + latMax) / 2;
+      final lng = (lngMin + lngMax) / 2;
+      mapController.move(LatLng(lat, lng), 14);
+    }
   }
 
   void _cambiarTileLayer(String providerName) {
@@ -159,15 +200,21 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   @override
   Widget build(BuildContext context) {
-    List<Marker> marcadores = [
-      Marker(
-        point: puntoCliente,
-        width: 80,
-        height: 80,
-        child: _buildMarker(Icons.location_on, 'Cliente', const Color(0xFFF44336)),
-      ),
-    ];
+    List<Marker> marcadores = [];
 
+    // Marcador del cliente
+    if (puntoCliente != null) {
+      marcadores.add(
+        Marker(
+          point: puntoCliente!,
+          width: 80,
+          height: 80,
+          child: _buildMarker(Icons.location_on, 'Cliente', const Color(0xFFF44336)),
+        ),
+      );
+    }
+
+    // Marcador del repartidor
     if (ubicacionActual != null) {
       marcadores.add(
         Marker(
@@ -177,10 +224,10 @@ class _PantallaMapaState extends State<PantallaMapa> {
           child: _buildMarker(Icons.delivery_dining, 'Repartidor', const Color(0xFF2196F3)),
         ),
       );
-    } else {
+    } else if (puntoDelivery != null) {
       marcadores.add(
         Marker(
-          point: puntoDelivery,
+          point: puntoDelivery!,
           width: 80,
           height: 80,
           child: _buildMarker(Icons.delivery_dining, 'Repartidor', const Color(0xFF2196F3)),
@@ -191,7 +238,10 @@ class _PantallaMapaState extends State<PantallaMapa> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Seguimiento de Entrega'),
+        title: Text(widget.pedido != null 
+            ? 'Seguimiento Pedido #${widget.pedido!.id.substring(widget.pedido!.id.length - 6)}'
+            : 'Seguimiento de Entrega'
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -253,7 +303,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
           FlutterMap(
             mapController: mapController,
             options: MapOptions(
-              center: ubicacionActual ?? puntoDelivery,
+              center: ubicacionActual ?? puntoDelivery ?? const LatLng(-17.7900, -63.1700),
               zoom: 14,
               interactiveFlags: InteractiveFlag.all,
             ),
@@ -310,33 +360,52 @@ class _PantallaMapaState extends State<PantallaMapa> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Información del pedido
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.schedule, color: Colors.white, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Tiempo estimado: 15-20 min',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // Información del pedido si está disponible
+                  if (widget.pedido != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                      ],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.schedule, 
+                                color: Colors.white, 
+                                size: 20
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Estado: ${widget.pedido!.estado}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.pedido!.direccion,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                  if (widget.pedido != null) const SizedBox(height: 16),
                   
                   // Botones de control
                   Row(
