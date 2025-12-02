@@ -2,10 +2,16 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiServicios {
-  static const String _baseUrl =
-      'https://bottelegramihc-production.up.railway.app';
+  // URL de Producción (Railway)
+  static const String _baseUrl = 'https://bottelegramihc-production.up.railway.app';
+  
+  // URL Local (Descomentar para pruebas en Emulador Android)
+  // static const String _baseUrl = 'http://10.0.2.2:5000';
 
-  static String _driverId = 'D1'; // Ahora no es const para poder cambiarlo
+  // URL Local (Descomentar para pruebas en iOS o Web)
+  // static const String _baseUrl = 'http://localhost:5000';
+
+  static String _driverId = 'D1';
 
   static final ApiServicios _instancia = ApiServicios._internal();
   factory ApiServicios() => _instancia;
