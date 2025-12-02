@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:mi_aplicacion_pizzeria/modelos/pedido.dart';
 import 'api_servicios.dart';
+import 'servicio_simulacion.dart';
 
 class ServicioPedidos with ChangeNotifier {
   final List<Pedido> _pedidos = [];
@@ -41,17 +43,9 @@ class ServicioPedidos with ChangeNotifier {
   }
 
   void _actualizarUbicacionSiEsNecesario() {
-    // Solo actualizar ubicación si hay pedidos activos
-    if (_misPedidos
-        .where((p) => p.estado != 'Entregado' && p.estado != 'Cancelado')
-        .isEmpty) {
-      print('⏸️ No hay pedidos activos - Saltando actualización de ubicación');
-      return;
-    }
-    // Enviar ubicación siempre para que el backend sepa quién está más cerca
-    // Usar coordenadas simuladas o reales. Aquí simulamos movimiento o posición fija.
-    // TODO: Integrar geolocator para obtener ubicación real
-    _apiServicios.actualizarUbicacionConductor(-17.7833, -63.1821);
+    // NOTA: La actualización de ubicación ahora se hace desde PantallaMapa periódicamente
+    // Este método ya no es necesario pero lo mantenemos por compatibilidad
+    print('ℹ️ Actualización de ubicación delegada a PantallaMapa');
   }
 
   // Pausar sincronización automática (útil cuando la app está en background)
@@ -189,6 +183,9 @@ class ServicioPedidos with ChangeNotifier {
           obtenerMisPedidos();
 
           notifyListeners();
+          
+          // ✨ INICIAR SIMULACIÓN DE VIAJE
+          _iniciarSimulacionViaje(pedidoAceptado);
         }
         return true;
       }
@@ -282,6 +279,60 @@ class ServicioPedidos with ChangeNotifier {
       _ultimoError = 'Error al marcar como llegado a destino: $error';
       notifyListeners();
       return false;
+    }
+  }
+
+  // ✨ MÉTODO PARA INICIAR SIMULACIÓN DE VIAJE
+  void _iniciarSimulacionViaje(Pedido pedido) async {
+    try {
+      // Obtener ubicación del restaurante (fija)
+      final LatLng ubicacionRestaurante = LatLng(-17.7836162, -63.1814985);
+      
+      // Obtener ubicación del cliente desde el pedido
+      if (pedido.ubicacion == null) {
+        print('⚠️ No hay ubicación del cliente en el pedido');
+        return;
+      }
+      
+      final LatLng ubicacionCliente = LatLng(
+        (pedido.ubicacion!['latitud'] ?? pedido.ubicacion!['latitude']) as double,
+        (pedido.ubicacion!['longitud'] ?? pedido.ubicacion!['longitude']) as double,
+      );
+      
+      // Obtener ubicación actual del conductor (puede ser FakeGPS o real)
+      // Si hay FakeGPS activo, usar esa ubicación, sino usar ubicación del restaurante
+      final LatLng ubicacionConductor = ubicacionRestaurante; // Por defecto
+      
+      print('🚀 Iniciando simulación de viaje:');
+      print('   Conductor: ${ubicacionConductor.latitude}, ${ubicacionConductor.longitude}');
+      print('   Restaurante: ${ubicacionRestaurante.latitude}, ${ubicacionRestaurante.longitude}');
+      print('   Cliente: ${ubicacionCliente.latitude}, ${ubicacionCliente.longitude}');
+      
+      // Iniciar la simulación del ciclo completo
+      await ServicioSimulacion().simularCicloPedido(
+        pedidoId: pedido.id,
+        conductorId: _apiServicios.driverId,
+        ubicacionConductor: ubicacionConductor,
+        ubicacionRestaurante: ubicacionRestaurante,
+        ubicacionCliente: ubicacionCliente,
+        onCambioEstado: (nuevoEstado) {
+          print('📍 Estado del pedido: $nuevoEstado');
+          // Aquí se podría actualizar el estado local si es necesario
+        },
+        onUbicacionActualizada: (nuevaUbicacion) {
+          print('🚗 Nueva ubicación: ${nuevaUbicacion.latitude}, ${nuevaUbicacion.longitude}');
+          // La ubicación ya se envía al backend automáticamente en ServicioSimulacion
+        },
+        onPedidoCompletado: () {
+          print('✅ Pedido completado con éxito');
+          // Refrescar la lista de pedidos
+          obtenerMisPedidos();
+        },
+        velocidadKmH: 30.0, // Velocidad moderada para testing
+      );
+      
+    } catch (error) {
+      print('❌ Error al iniciar simulación: $error');
     }
   }
 

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:mi_aplicacion_pizzeria/modelos/pedido.dart';
+import 'package:mi_aplicacion_pizzeria/servicios/api_servicios.dart';
 import 'package:mi_aplicacion_pizzeria/servicios/servicio_pedido.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +25,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
   bool _isLoading = true;
   bool _pedidoEnLugar = false;
   LocationData? _currentLocation;
+  Timer? _timerActualizacionUbicacion;
+  
+  // Variables estáticas para preservar FakeGPS entre cambios de TAB
+  static LatLng? _simulatedLocation;
+  static bool _modoFakeGPSActivo = false;
+  
   final Location _locationService = Location();
 
   // Coordenadas del restaurante (fijas)
@@ -39,19 +47,43 @@ class _PantallaMapaState extends State<PantallaMapa> {
   void initState() {
     super.initState();
     _mapController = MapController();
+    // NO limpiar _simulatedLocation ni _modoFakeGPSActivo (son estáticos/globales)
+    // Se conservan entre cambios de TAB
+    _currentLocation = null; // Limpiar ubicación anterior
+    _pedidoEnLugar = false;
+    _markers.clear();
+    _polylines.clear();
     _obtenerUbicacionActual();
     _initializeMap();
+    _iniciarActualizacionPeriodicaUbicacion();
   }
 
   @override
   void didUpdateWidget(PantallaMapa oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Si cambió el pedidoId, reinicializar el mapa
-    if (oldWidget.pedidoId != widget.pedidoId) {
+    
+    // Solo limpiar FakeGPS si cambias a un PEDIDO DIFERENTE
+    // (no cuando cambias entre Mapa ↔ Pedidos sin seleccionar un pedido específico)
+    final ambosConPedidosDiferentes = oldWidget.pedidoId != null && 
+                                       widget.pedidoId != null && 
+                                       oldWidget.pedidoId != widget.pedidoId;
+    
+    if (ambosConPedidosDiferentes) {
+      // Solo limpiar si cambias de un pedido a OTRO PEDIDO diferente
       _markers.clear();
       _polylines.clear();
       _pedidoEnLugar = false;
+      _simulatedLocation = null;
+      _modoFakeGPSActivo = false;
+      _currentLocation = null;
+      
       _initializeMap();
+      
+      if (mounted) {
+        Future.microtask(() {
+          setState(() {});
+        });
+      }
     }
   }
 
@@ -84,7 +116,10 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
     final locationData = await _locationService.getLocation();
     if (mounted) {
-      _currentLocation = locationData; // NO llamar setState aquí
+      // SOLO actualizar _currentLocation si FakeGPS NO está activo
+      if (!_modoFakeGPSActivo) {
+        _currentLocation = locationData;
+      }
       // Si estamos en modo genérico (sin pedido), actualizar el mapa UNA SOLA VEZ
       if (widget.pedidoId == null && _isLoading) {
         setState(() {
@@ -95,9 +130,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
     // Escuchar cambios de ubicación pero NO reconstruir el widget cada vez
     _locationService.onLocationChanged.listen((LocationData currentLocation) {
-      if (mounted) {
-        _currentLocation =
-            currentLocation; // Solo actualizar la variable, sin setState
+      if (mounted && !_modoFakeGPSActivo) {
+        // SOLO actualizar si FakeGPS NO está activo
+        _currentLocation = currentLocation; // Solo actualizar la variable, sin setState
       }
     });
   }
@@ -211,6 +246,11 @@ class _PantallaMapaState extends State<PantallaMapa> {
     LatLng restauranteCoords,
     LatLng clienteCoords,
   ) {
+    // Si hay ubicación simulada (FakeGPS), usarla
+    if (_simulatedLocation != null) {
+      return _simulatedLocation!;
+    }
+
     switch (estado) {
       case 'Repartidor Asignado':
         // Está en el restaurante recogiendo el pedido
@@ -429,6 +469,134 @@ class _PantallaMapaState extends State<PantallaMapa> {
     );
   }
 
+  /// Activar/desactivar modo FakeGPS interactivo
+  void _alternarModoFakeGPS() {
+    setState(() {
+      _modoFakeGPSActivo = !_modoFakeGPSActivo;
+    });
+
+    if (_modoFakeGPSActivo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            '🎮 Modo FakeGPS ACTIVO - Toca el mapa para mover tu ubicación',
+          ),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🎮 Modo FakeGPS desactivado'),
+          backgroundColor: Colors.grey.shade700,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Manejar el toque en el mapa para simular ubicación
+  void _onMapTap(LatLng position) async {
+    if (_modoFakeGPSActivo) {
+      setState(() {
+        _simulatedLocation = position;
+        
+        // Si hay un pedido específico, recalcular marcadores
+        if (widget.pedidoId != null) {
+          final servicioPedidos = context.read<ServicioPedidos>();
+          final pedido = servicioPedidos.obtenerPedidoPorId(widget.pedidoId!);
+          if (pedido != null) {
+            _setupMarkersConPedido(pedido);
+          }
+        } else {
+          // Si no hay pedido (mapa genérico), simplemente actualizar _simulatedLocation
+          // Los marcadores se recalculan en el build del mapa genérico
+        }
+      });
+
+      // Actualizar ubicación en el backend
+      try {
+        final apiServicios = ApiServicios();
+        await apiServicios.actualizarUbicacionConductor(
+          position.latitude,
+          position.longitude,
+        );
+        print('✅ Ubicación FakeGPS actualizada en backend: ${position.latitude}, ${position.longitude}');
+      } catch (error) {
+        print('❌ Error al actualizar ubicación en backend: $error');
+      }
+
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '📍 Ubicación simulada: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _iniciarActualizacionPeriodicaUbicacion() {
+    // Enviar ubicación al backend cada 30 segundos para mantener actualizada la posición del conductor
+    _timerActualizacionUbicacion = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      try {
+        final apiServicios = ApiServicios();
+        LatLng ubicacionAEnviar;
+        
+        // Usar FakeGPS si está activo, sino usar ubicación real
+        if (_simulatedLocation != null) {
+          ubicacionAEnviar = _simulatedLocation!;
+        } else if (_currentLocation != null) {
+          ubicacionAEnviar = LatLng(
+            _currentLocation!.latitude!,
+            _currentLocation!.longitude!,
+          );
+        } else {
+          // Si no hay ubicación, usar ubicación del restaurante por defecto
+          ubicacionAEnviar = _restauranteMapCoords;
+        }
+        
+        await apiServicios.actualizarUbicacionConductor(
+          ubicacionAEnviar.latitude,
+          ubicacionAEnviar.longitude,
+        );
+        print('✅ Ubicación actualizada periódicamente: ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
+      } catch (error) {
+        print('❌ Error al actualizar ubicación periódica: $error');
+      }
+    });
+    
+    // Enviar ubicación inmediatamente al iniciar
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        final apiServicios = ApiServicios();
+        LatLng ubicacionAEnviar = _simulatedLocation ?? 
+                                 (_currentLocation != null 
+                                   ? LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!)
+                                   : _restauranteMapCoords);
+        await apiServicios.actualizarUbicacionConductor(
+          ubicacionAEnviar.latitude,
+          ubicacionAEnviar.longitude,
+        );
+        print('✅ Ubicación inicial enviada: ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
+      } catch (error) {
+        print('❌ Error al enviar ubicación inicial: $error');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerActualizacionUbicacion?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<ServicioPedidos, Pedido?>(
@@ -439,8 +607,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
         return null;
       },
       shouldRebuild: (previous, next) {
-        // Solo reconstruir si cambió el pedido o su estado
-        if (previous == null && next == null) return false;
+        // Reconstruir si cambió el pedido, su estado, ubicación o si el FakeGPS cambió la ubicación simulada
+        if (previous == null && next == null) return true; // Reconstruir siempre si ambos son null (permite refrescar con FakeGPS)
         if (previous == null || next == null) return true;
         return previous.id != next.id ||
             previous.estado != next.estado ||
@@ -523,6 +691,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
                         onMapReady: () {
                           _fitMarkersToMap(clienteCoords);
                         },
+                        onTap: (tapPosition, latLng) {
+                          _onMapTap(latLng);
+                        },
                       ),
                       children: [
                         TileLayer(
@@ -572,6 +743,14 @@ class _PantallaMapaState extends State<PantallaMapa> {
                               _mapController.camera.zoom - 1,
                             ),
                             child: const Icon(Icons.remove),
+                          ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'fake_gps',
+                            onPressed: _alternarModoFakeGPS,
+                            backgroundColor: _modoFakeGPSActivo ? Colors.red : Colors.orange,
+                            tooltip: _modoFakeGPSActivo ? 'FakeGPS: ACTIVO (toca para mover)' : 'FakeGPS: Desactivado',
+                            child: Icon(_modoFakeGPSActivo ? Icons.videogame_asset : Icons.videogame_asset_outlined),
                           ),
                         ],
                       ),
@@ -645,25 +824,58 @@ class _PantallaMapaState extends State<PantallaMapa> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      pedido.estado == 'En camino' && _pedidoEnLugar
-                          ? 'En camino - En el lugar'
-                          : pedido.estado,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          pedido.estado == 'En camino' && _pedidoEnLugar
+                              ? 'En camino - En el lugar'
+                              : pedido.estado,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (_modoFakeGPSActivo) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.videogame_asset,
+                                  color: Colors.white, size: 12),
+                              SizedBox(width: 4),
+                              Text(
+                                'FakeGPS ACTIVO',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -1037,9 +1249,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
     // Coordenadas por defecto (Restaurante)
     final restauranteCoords = _restauranteMapCoords;
 
-    // Coordenadas del repartidor (usar ubicación real si está disponible)
+    // Coordenadas del repartidor (usar ubicación simulada si está disponible, sino usar real)
     LatLng repartidorCoords;
-    if (_currentLocation != null) {
+    if (_simulatedLocation != null) {
+      // Si hay ubicación simulada (FakeGPS), usarla
+      repartidorCoords = _simulatedLocation!;
+    } else if (_currentLocation != null) {
       repartidorCoords = LatLng(
         _currentLocation!.latitude!,
         _currentLocation!.longitude!,
@@ -1114,6 +1329,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
             options: MapOptions(
               initialCenter: repartidorCoords, // Centrar en el repartidor
               initialZoom: 14.0,
+              onTap: (tapPosition, latLng) {
+                _onMapTap(latLng);
+              },
             ),
             children: [
               TileLayer(
@@ -1153,22 +1371,34 @@ class _PantallaMapaState extends State<PantallaMapa> {
           Positioned(
             right: 16,
             bottom: 100,
-            child: FloatingActionButton(
-              heroTag: 'my_location',
-              onPressed: () {
-                if (_currentLocation != null) {
-                  _mapController.move(
-                    LatLng(
-                      _currentLocation!.latitude!,
-                      _currentLocation!.longitude!,
-                    ),
-                    15.0,
-                  );
-                } else {
-                  _obtenerUbicacionActual();
-                }
-              },
-              child: const Icon(Icons.my_location),
+            child: Column(
+              children: [
+                FloatingActionButton(
+                  heroTag: 'my_location',
+                  onPressed: () {
+                    if (_currentLocation != null) {
+                      _mapController.move(
+                        LatLng(
+                          _currentLocation!.latitude!,
+                          _currentLocation!.longitude!,
+                        ),
+                        15.0,
+                      );
+                    } else {
+                      _obtenerUbicacionActual();
+                    }
+                  },
+                  child: const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
+                  heroTag: 'fake_gps_generic',
+                  onPressed: _alternarModoFakeGPS,
+                  backgroundColor: _modoFakeGPSActivo ? Colors.red : Colors.orange,
+                  tooltip: _modoFakeGPSActivo ? 'FakeGPS: ACTIVO (toca para mover)' : 'FakeGPS: Desactivado',
+                  child: Icon(_modoFakeGPSActivo ? Icons.videogame_asset : Icons.videogame_asset_outlined),
+                ),
+              ],
             ),
           ),
         ],

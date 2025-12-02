@@ -6,8 +6,18 @@ import 'package:provider/provider.dart';
 import 'pantallas/pantalla_pedidos.dart';
 import 'pantallas/pantalla_mapa.dart';
 
+// Variables de compilación para soporte dual de conductores
+const String _driverId = String.fromEnvironment('DRIVER_ID', defaultValue: '');
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Si se proporciona un DRIVER_ID por compilación, establecerlo automáticamente
+  if (_driverId.isNotEmpty) {
+    ApiServicios().setDriverId(_driverId);
+    debugPrint('🚗 Instancia iniciada con Conductor ID: $_driverId');
+  }
+  
   runApp(const MiPizzeriaApp());
 }
 
@@ -44,13 +54,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   @override
   void initState() {
     super.initState();
-    // Mostrar selector de conductor al iniciar la app (solo una vez)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_dialogoMostrado && mounted) {
-        _dialogoMostrado = true;
-        _mostrarSelectorConductor();
+    // Si el conductor fue definido por compilación, no mostrar selector
+    if (_driverId.isNotEmpty) {
+      _conductorId = _driverId;
+      // Mapear ID a nombre
+      if (_driverId == 'D1') {
+        _conductorNombre = 'Conductor 1';
+      } else if (_driverId == 'D2') {
+        _conductorNombre = 'Conductor 2';
+      } else {
+        _conductorNombre = _driverId;
       }
-    });
+      _dialogoMostrado = true;
+      debugPrint('✅ Conductor $_driverId cargado automáticamente');
+    } else {
+      // Mostrar selector de conductor al iniciar la app (solo una vez)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_dialogoMostrado && mounted) {
+          _dialogoMostrado = true;
+          _mostrarSelectorConductor();
+        }
+      });
+    }
   }
 
   void _mostrarSelectorConductor() {
