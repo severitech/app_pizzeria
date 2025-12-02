@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:location/location.dart';
 import 'package:mi_aplicacion_pizzeria/modelos/pedido.dart';
 import 'package:mi_aplicacion_pizzeria/servicios/servicio_pedido.dart';
 import 'package:provider/provider.dart';
 
 class PantallaMapa extends StatefulWidget {
-  final String pedidoId;
+  final String? pedidoId;
+  final bool mostrarAtras;
 
-  const PantallaMapa({Key? key, required this.pedidoId}) : super(key: key);
+  const PantallaMapa({super.key, this.pedidoId, this.mostrarAtras = true});
 
   @override
   State<PantallaMapa> createState() => _PantallaMapaState();
@@ -20,6 +22,13 @@ class _PantallaMapaState extends State<PantallaMapa> {
   final List<Polyline> _polylines = [];
   bool _isLoading = true;
   bool _pedidoEnLugar = false;
+  LocationData? _currentLocation;
+  final Location _locationService = Location();
+
+  // Coordenadas del restaurante (fijas)
+  // static const LatLng _restauranteCoords = LatLng(-17.7832662, -63.1820985);
+  // Coordenadas desplazadas para visualización en mapa (evita superposición exacta)
+  static const LatLng _restauranteMapCoords = LatLng(-17.7836162, -63.1814985);
 
   // Colores para los marcadores
   static const Color _colorRestaurante = Color(0xFF667eea);
@@ -30,7 +39,66 @@ class _PantallaMapaState extends State<PantallaMapa> {
   void initState() {
     super.initState();
     _mapController = MapController();
+    _obtenerUbicacionActual();
     _initializeMap();
+  }
+
+  @override
+  void didUpdateWidget(PantallaMapa oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si cambió el pedidoId, reinicializar el mapa
+    if (oldWidget.pedidoId != widget.pedidoId) {
+      _markers.clear();
+      _polylines.clear();
+      _pedidoEnLugar = false;
+      _initializeMap();
+    }
+  }
+
+  // Helper para obtener ID corto de forma segura
+  String _obtenerIdCorto(String id) {
+    if (id.isEmpty) return 'Sin ID';
+    if (id.length <= 6) return id;
+    return id.substring(id.length - 6);
+  }
+
+  Future<void> _obtenerUbicacionActual() async {
+    bool serviceEnabled;
+    PermissionStatus permissionGranted;
+
+    serviceEnabled = await _locationService.serviceEnabled();
+    if (!serviceEnabled) {
+      serviceEnabled = await _locationService.requestService();
+      if (!serviceEnabled) {
+        return;
+      }
+    }
+
+    permissionGranted = await _locationService.hasPermission();
+    if (permissionGranted == PermissionStatus.denied) {
+      permissionGranted = await _locationService.requestPermission();
+      if (permissionGranted != PermissionStatus.granted) {
+        return;
+      }
+    }
+
+    final locationData = await _locationService.getLocation();
+    if (mounted) {
+      _currentLocation = locationData; // NO llamar setState aquí
+      // Si estamos en modo genérico (sin pedido), actualizar el mapa UNA SOLA VEZ
+      if (widget.pedidoId == null && _isLoading) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+
+    // Escuchar cambios de ubicación pero NO reconstruir el widget cada vez
+    _locationService.onLocationChanged.listen((LocationData currentLocation) {
+      if (mounted) {
+        _currentLocation = currentLocation; // Solo actualizar la variable, sin setState
+      }
+    });
   }
 
   void _initializeMap() {
@@ -44,25 +112,59 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   void _setupMarkersConPedido(Pedido pedido) {
     _markers.clear();
-    
-    // Extraer coordenadas de la dirección del cliente
-    final clienteCoords = _extractCoordsFromAddress(pedido.direccion);
-    
-    // Coordenadas del restaurante (por defecto)
-    final restauranteCoords = const LatLng(-17.827459, -63.169474);
-    
-    // Coordenadas del repartidor (simuladas cerca del restaurante)
-    final repartidorCoords = LatLng(
-      restauranteCoords.latitude + 0.002, 
-      restauranteCoords.longitude + 0.002
+
+    // Extraer coordenadas del cliente desde el campo 'location' del pedido
+    LatLng clienteCoords;
+    if (pedido.ubicacion != null && 
+        pedido.ubicacion!['latitude'] != null && 
+        pedido.ubicacion!['longitude'] != null) {
+      clienteCoords = LatLng(
+        (pedido.ubicacion!['latitude'] as num).toDouble(),
+        (pedido.ubicacion!['longitude'] as num).toDouble(),
+      );
+    } else {
+      // Si no hay ubicación en el modelo, intentar extraer de la dirección
+      clienteCoords = _extractCoordsFromAddress(pedido.direccion);
+    }
+
+    // Coordenadas del restaurante (SIEMPRE usar las del backend)
+    LatLng restauranteCoords;
+    if (pedido.restaurantLocation != null && 
+        pedido.restaurantLocation!['latitude'] != null && 
+        pedido.restaurantLocation!['longitude'] != null) {
+      restauranteCoords = LatLng(
+        (pedido.restaurantLocation!['latitude'] as num).toDouble(),
+        (pedido.restaurantLocation!['longitude'] as num).toDouble(),
+      );
+    } else {
+      // Fallback SOLO si el backend no envió las coordenadas
+      print('⚠️ ADVERTENCIA: No hay coordenadas del restaurante en el pedido');
+      restauranteCoords = _restauranteMapCoords;
+    }
+
+    // Coordenadas del repartidor SIMULADAS según el estado del pedido
+    LatLng repartidorCoords = _calcularPosicionRepartidor(
+      pedido.estado,
+      restauranteCoords,
+      clienteCoords,
+    );
+
+    // Calcular distancia al destino según el estado
+    final destino = (pedido.estado == 'Repartidor Asignado') 
+        ? restauranteCoords 
+        : clienteCoords;
+    final distance = const Distance().as(
+      LengthUnit.Meter,
+      repartidorCoords,
+      destino,
     );
 
     // Marcador del restaurante
     _markers.add(
       Marker(
         point: restauranteCoords,
-        width: 50,
-        height: 50,
+        width: 80,
+        height: 80,
         child: _buildCustomMarker('🏪', 'Restaurante', _colorRestaurante),
       ),
     );
@@ -71,19 +173,34 @@ class _PantallaMapaState extends State<PantallaMapa> {
     _markers.add(
       Marker(
         point: clienteCoords,
-        width: 50,
-        height: 50,
+        width: 80,
+        height: 80,
         child: _buildCustomMarker('📍', 'Cliente', _colorCliente),
       ),
     );
 
-    // Marcador del repartidor
+    // Marcador del repartidor con mensaje según el estado
+    String labelRepartidor;
+    if (pedido.estado == 'Repartidor Asignado') {
+      labelRepartidor = 'Tú - En restaurante';
+    } else if (pedido.estado == 'En camino' && !_pedidoEnLugar) {
+      labelRepartidor = 'Tú (${distance.toStringAsFixed(0)}m al destino)';
+    } else if (_pedidoEnLugar || pedido.estado == 'Entregado') {
+      labelRepartidor = 'Tú - En destino';
+    } else {
+      labelRepartidor = 'Tú';
+    }
+
     _markers.add(
       Marker(
         point: repartidorCoords,
-        width: 50,
-        height: 50,
-        child: _buildCustomMarker('🚗', 'Tú', _colorRepartidor),
+        width: 80,
+        height: 80,
+        child: _buildCustomMarker(
+          '🚗',
+          labelRepartidor,
+          _colorRepartidor,
+        ),
       ),
     );
 
@@ -91,8 +208,47 @@ class _PantallaMapaState extends State<PantallaMapa> {
     _createPolylines(restauranteCoords, clienteCoords, repartidorCoords);
   }
 
+  // Calcular posición simulada del repartidor según el estado
+  LatLng _calcularPosicionRepartidor(
+    String estado,
+    LatLng restauranteCoords,
+    LatLng clienteCoords,
+  ) {
+    switch (estado) {
+      case 'Repartidor Asignado':
+        // Está en el restaurante recogiendo el pedido
+        return restauranteCoords;
+
+      case 'En camino':
+        if (_pedidoEnLugar) {
+          // Ya llegó, mostrar en la ubicación del cliente
+          return clienteCoords;
+        } else {
+          // Está en ruta, calcular punto medio más cercano al cliente (70% del camino)
+          final latDiff = clienteCoords.latitude - restauranteCoords.latitude;
+          final lngDiff = clienteCoords.longitude - restauranteCoords.longitude;
+          return LatLng(
+            restauranteCoords.latitude + (latDiff * 0.7),
+            restauranteCoords.longitude + (lngDiff * 0.7),
+          );
+        }
+
+      case 'Entregado':
+        // En la ubicación del cliente
+        return clienteCoords;
+
+      default:
+        // Por defecto, cerca del restaurante
+        return LatLng(
+          restauranteCoords.latitude + 0.001,
+          restauranteCoords.longitude + 0.001,
+        );
+    }
+  }
+
   Widget _buildCustomMarker(String emoji, String label, Color color) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -102,36 +258,37 @@ class _PantallaMapaState extends State<PantallaMapa> {
             border: Border.all(color: Colors.white, width: 2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Text(
-            emoji,
-            style: const TextStyle(fontSize: 16),
-          ),
+          child: Text(emoji, style: const TextStyle(fontSize: 16)),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
               ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ),
@@ -141,51 +298,83 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   LatLng _extractCoordsFromAddress(String address) {
     try {
-      final coordsMatch = RegExp(r'Coords?:?\s*(-?\d+\.\d+),\s*(-?\d+\.\d+)').firstMatch(address);
+      // Intentar parsear coordenadas explícitas en el texto
+      final coordsMatch = RegExp(
+        r'Coords?:?\s*(-?\d+\.\d+),\s*(-?\d+\.\d+)',
+      ).firstMatch(address);
+
       if (coordsMatch != null) {
         final lat = double.parse(coordsMatch.group(1)!);
         final lng = double.parse(coordsMatch.group(2)!);
         return LatLng(lat, lng);
       }
+
+      // Si no hay formato explícito, buscar cualquier par de números que parezcan coordenadas
+      // (latitud entre -90 y 90, longitud entre -180 y 180)
+      final generalMatch = RegExp(
+        r'(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)',
+      ).firstMatch(address);
+      if (generalMatch != null) {
+        final lat = double.parse(generalMatch.group(1)!);
+        final lng = double.parse(generalMatch.group(2)!);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          return LatLng(lat, lng);
+        }
+      }
     } catch (e) {
       print('Error extrayendo coordenadas: $e');
     }
-    
+
+    // Si falla, devolver una ubicación por defecto (pero loguear el error)
+    print('⚠️ No se pudieron extraer coordenadas de: $address');
     return const LatLng(-17.7865, -63.1785);
   }
 
-  void _createPolylines(LatLng restaurantePos, LatLng clientePos, LatLng repartidorPos) {
+  void _createPolylines(
+    LatLng restaurantePos,
+    LatLng clientePos,
+    LatLng repartidorPos,
+  ) {
     _polylines.clear();
-    
-    // Línea de restaurante a cliente
+
+    // Línea de ruta completa (restaurante a cliente) - ruta planificada
     _polylines.add(
       Polyline(
         points: [restaurantePos, clientePos],
-        color: _colorRestaurante.withOpacity(0.7),
-        strokeWidth: 4,
-        isDotted: true,
-      ),
-    );
-
-    // Línea de repartidor a restaurante
-    _polylines.add(
-      Polyline(
-        points: [repartidorPos, restaurantePos],
-        color: _colorRepartidor.withOpacity(0.7),
+        color: _colorRestaurante.withValues(alpha: 0.3),
         strokeWidth: 3,
         isDotted: true,
       ),
     );
+
+    // Línea de progreso actual (repartidor a destino)
+    _polylines.add(
+      Polyline(
+        points: [repartidorPos, clientePos],
+        color: _colorRepartidor.withValues(alpha: 0.8),
+        strokeWidth: 4,
+        isDotted: false,
+      ),
+    );
+    
+    // Línea del recorrido realizado (restaurante a posición actual)
+    if (repartidorPos != restaurantePos) {
+      _polylines.add(
+        Polyline(
+          points: [restaurantePos, repartidorPos],
+          color: Colors.green.withValues(alpha: 0.6),
+          strokeWidth: 4,
+          isDotted: false,
+        ),
+      );
+    }
   }
 
   void _fitMarkersToMap(LatLng clienteCoords) {
     if (_markers.isNotEmpty) {
       final bounds = _boundsFromMarkers();
-      _mapController.fitBounds(
-        bounds,
-        options: const FitBoundsOptions(
-          padding: EdgeInsets.all(50),
-        ),
+      _mapController.fitCamera(
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
       );
     }
   }
@@ -206,10 +395,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
       maxLng = maxLng > lng ? maxLng : lng;
     }
 
-    return LatLngBounds(
-      LatLng(minLat, minLng),
-      LatLng(maxLat, maxLng),
-    );
+    return LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
   }
 
   String _getShortAddress(String fullAddress) {
@@ -248,28 +434,42 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ServicioPedidos>(
-      builder: (context, servicioPedidos, child) {
-        final pedido = servicioPedidos.obtenerPedidoPorId(widget.pedidoId);
-        
+    return Selector<ServicioPedidos, Pedido?>(
+      selector: (context, servicioPedidos) {
+        if (widget.pedidoId != null) {
+          return servicioPedidos.obtenerPedidoPorId(widget.pedidoId!);
+        }
+        return null;
+      },
+      shouldRebuild: (previous, next) {
+        // Solo reconstruir si cambió el pedido o su estado
+        if (previous == null && next == null) return false;
+        if (previous == null || next == null) return true;
+        return previous.id != next.id || 
+               previous.estado != next.estado ||
+               previous.ubicacion != next.ubicacion;
+      },
+      builder: (context, pedido, child) {
+        // Si no hay pedido específico, mostrar mapa genérico
         if (pedido == null) {
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Mapa'),
-              backgroundColor: const Color(0xFF667eea),
-            ),
-            body: const Center(
-              child: Text('Pedido no encontrado'),
-            ),
-          );
+          return _buildMapaGenerico();
         }
 
         // Configurar marcadores con el pedido actual
-        if (_markers.isEmpty) {
-          _setupMarkersConPedido(pedido);
-        }
+        _setupMarkersConPedido(pedido);
 
-        final clienteCoords = _extractCoordsFromAddress(pedido.direccion);
+        // Usar las coordenadas correctas del pedido
+        LatLng clienteCoords;
+        if (pedido.ubicacion != null && 
+            pedido.ubicacion!['latitude'] != null && 
+            pedido.ubicacion!['longitude'] != null) {
+          clienteCoords = LatLng(
+            (pedido.ubicacion!['latitude'] as num).toDouble(),
+            (pedido.ubicacion!['longitude'] as num).toDouble(),
+          );
+        } else {
+          clienteCoords = _extractCoordsFromAddress(pedido.direccion);
+        }
 
         return Scaffold(
           extendBodyBehindAppBar: true,
@@ -294,10 +494,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
                 ),
               ),
             ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            leading: widget.mostrarAtras
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  )
+                : null,
             actions: [
               IconButton(
                 icon: const Icon(Icons.zoom_out_map, color: Colors.white),
@@ -309,7 +511,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
           body: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF667eea),
+                    ),
                   ),
                 )
               : Stack(
@@ -317,31 +521,29 @@ class _PantallaMapaState extends State<PantallaMapa> {
                     FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
-                        center: clienteCoords,
-                        zoom: 14.0,
+                        initialCenter: clienteCoords,
+                        initialZoom: 14.0,
                         onMapReady: () {
                           _fitMarkersToMap(clienteCoords);
                         },
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.example.mi_aplicacion_pizzeria',
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName:
+                              'com.example.mi_aplicacion_pizzeria',
                           subdomains: const ['a', 'b', 'c'],
                         ),
-                        PolylineLayer(
-                          polylines: _polylines,
-                        ),
-                        MarkerLayer(
-                          markers: _markers,
-                        ),
+                        PolylineLayer(polylines: _polylines),
+                        MarkerLayer(markers: _markers),
                       ],
                     ),
                     Positioned(
                       top: 80,
                       left: 0,
                       right: 0,
-                      child: _buildInfoCard(pedido, servicioPedidos),
+                      child: _buildInfoCard(pedido, context.read<ServicioPedidos>()),
                     ),
                     Positioned(
                       bottom: 20,
@@ -382,9 +584,31 @@ class _PantallaMapaState extends State<PantallaMapa> {
   }
 
   Widget _buildInfoCard(Pedido pedido, ServicioPedidos servicioPedidos) {
-    final clienteCoords = _extractCoordsFromAddress(pedido.direccion);
-    final restauranteCoords = const LatLng(-17.827459, -63.169474);
-    
+    // Usar las MISMAS coordenadas que se usan en los marcadores
+    LatLng clienteCoords;
+    if (pedido.ubicacion != null && 
+        pedido.ubicacion!['latitude'] != null && 
+        pedido.ubicacion!['longitude'] != null) {
+      clienteCoords = LatLng(
+        (pedido.ubicacion!['latitude'] as num).toDouble(),
+        (pedido.ubicacion!['longitude'] as num).toDouble(),
+      );
+    } else {
+      clienteCoords = _extractCoordsFromAddress(pedido.direccion);
+    }
+
+    LatLng restauranteCoords;
+    if (pedido.restaurantLocation != null && 
+        pedido.restaurantLocation!['latitude'] != null && 
+        pedido.restaurantLocation!['longitude'] != null) {
+      restauranteCoords = LatLng(
+        (pedido.restaurantLocation!['latitude'] as num).toDouble(),
+        (pedido.restaurantLocation!['longitude'] as num).toDouble(),
+      );
+    } else {
+      restauranteCoords = _restauranteMapCoords;
+    }
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -397,7 +621,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -413,7 +637,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Pedido #${pedido.id.length > 6 ? pedido.id.substring(pedido.id.length - 6) : pedido.id}',
+                    'Pedido #${_obtenerIdCorto(pedido.id)}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -422,14 +646,17 @@ class _PantallaMapaState extends State<PantallaMapa> {
                   ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      pedido.estado == 'En camino' && _pedidoEnLugar 
-                          ? 'En camino - En el lugar' 
+                      pedido.estado == 'En camino' && _pedidoEnLugar
+                          ? 'En camino - En el lugar'
                           : pedido.estado,
                       style: const TextStyle(
                         color: Colors.white,
@@ -465,7 +692,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -482,10 +709,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
                 const SizedBox(height: 8),
                 Text(
                   _formatProducts(pedido.items),
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -530,7 +754,11 @@ class _PantallaMapaState extends State<PantallaMapa> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              icon: const Icon(Icons.directions_bike, color: Colors.white, size: 20),
+              icon: const Icon(
+                Icons.directions_bike,
+                color: Colors.white,
+                size: 20,
+              ),
               label: const Text('MARCAR EN CAMINO'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -543,14 +771,16 @@ class _PantallaMapaState extends State<PantallaMapa> {
                 await _mostrarDialogoConfirmacion(
                   context,
                   'Marcar en Camino',
-                  '¿Estás listo para salir a entregar el pedido #${pedido.id.substring(pedido.id.length - 6)}?',
+                  '¿Estás listo para salir a entregar el pedido #${_obtenerIdCorto(pedido.id)}?',
                   () async {
                     final exito = await servicioPedidos.enviarPedido(pedido.id);
                     if (mounted) {
                       if (exito) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('🚚 Pedido #${pedido.id.substring(pedido.id.length - 6)} marcado como EN CAMINO'),
+                            content: Text(
+                              '🚚 Pedido #${_obtenerIdCorto(pedido.id)} marcado como EN CAMINO',
+                            ),
                             backgroundColor: Colors.orange,
                             duration: const Duration(seconds: 3),
                           ),
@@ -583,7 +813,11 @@ class _PantallaMapaState extends State<PantallaMapa> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.location_on, color: Colors.white, size: 20),
+                icon: const Icon(
+                  Icons.location_on,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 label: const Text('TU PEDIDO LLEGÓ AL LUGAR'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
@@ -596,7 +830,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
                   await _mostrarDialogoConfirmacion(
                     context,
                     'Llegada al Lugar',
-                    '¿Has llegado a la dirección del cliente con el pedido #${pedido.id.substring(pedido.id.length - 6)}?',
+                    '¿Has llegado a la dirección del cliente con el pedido #${_obtenerIdCorto(pedido.id)}?',
                     () async {
                       if (mounted) {
                         setState(() {
@@ -604,7 +838,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('📍 Pedido #${pedido.id.substring(pedido.id.length - 6)} marcado como LLEGADO AL LUGAR'),
+                            content: Text(
+                              '📍 Pedido #${_obtenerIdCorto(pedido.id)} marcado como LLEGADO AL LUGAR',
+                            ),
                             backgroundColor: Colors.blue,
                             duration: const Duration(seconds: 3),
                           ),
@@ -624,7 +860,11 @@ class _PantallaMapaState extends State<PantallaMapa> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                icon: const Icon(
+                  Icons.check_circle,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 label: const Text('MARCAR COMO ENTREGADO'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
@@ -637,21 +877,33 @@ class _PantallaMapaState extends State<PantallaMapa> {
                   await _mostrarDialogoConfirmacion(
                     context,
                     'Entregar Pedido',
-                    '¿Has entregado el pedido #${pedido.id.substring(pedido.id.length - 6)} al cliente?',
+                    '¿Has entregado el pedido #${_obtenerIdCorto(pedido.id)} al cliente?',
                     () async {
-                      final exito = await servicioPedidos.entregarPedido(pedido.id);
+                      final exito = await servicioPedidos.entregarPedido(
+                        pedido.id,
+                      );
                       if (mounted) {
                         if (exito) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('✅ Pedido #${pedido.id.substring(pedido.id.length - 6)} ENTREGADO correctamente'),
+                              content: Text(
+                                '✅ Pedido #${_obtenerIdCorto(pedido.id)} ENTREGADO correctamente',
+                              ),
                               backgroundColor: Colors.green,
                               duration: const Duration(seconds: 3),
                             ),
                           );
+                          // Limpiar estado para permitir que el mapa se reinicie
                           setState(() {
                             _pedidoEnLugar = false;
+                            _markers.clear();
+                            _polylines.clear();
                           });
+                          // Si estamos en la navegación por tabs, el mapa se reconstruirá automáticamente
+                          // Si estamos en navegación push, volver atrás
+                          if (widget.mostrarAtras) {
+                            Navigator.of(context).pop();
+                          }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -676,14 +928,19 @@ class _PantallaMapaState extends State<PantallaMapa> {
   }
 
   // ... (los demás métodos _buildLocationInfo, _formatProducts, _buildLegend, _buildLegendItem se mantienen igual)
-  Widget _buildLocationInfo(String title, String subtitle, LatLng coords, IconData icon) {
+  Widget _buildLocationInfo(
+    String title,
+    String subtitle,
+    LatLng coords,
+    IconData icon,
+  ) {
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: Colors.white, size: 20),
@@ -703,18 +960,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
               ),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
                 '${coords.latitude.toStringAsFixed(6)}, ${coords.longitude.toStringAsFixed(6)}',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 10,
-                ),
+                style: const TextStyle(color: Colors.white60, fontSize: 10),
               ),
             ],
           ),
@@ -725,13 +976,13 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
   String _formatProducts(List<dynamic> items) {
     if (items.isEmpty) return 'No hay productos en el pedido';
-    
+
     final productList = items.map((item) {
       final name = item['name'] ?? 'Producto';
       final quantity = item['quantity'] ?? 1;
       return '• $name x$quantity';
     }).toList();
-    
+
     return productList.join('\n');
   }
 
@@ -744,7 +995,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -767,10 +1018,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
         Container(
           width: 12,
           height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
         Text(
@@ -782,6 +1030,149 @@ class _PantallaMapaState extends State<PantallaMapa> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMapaGenerico() {
+    // Coordenadas por defecto (Restaurante)
+    final restauranteCoords = _restauranteMapCoords;
+
+    // Coordenadas del repartidor (usar ubicación real si está disponible)
+    LatLng repartidorCoords;
+    if (_currentLocation != null) {
+      repartidorCoords = LatLng(
+        _currentLocation!.latitude!,
+        _currentLocation!.longitude!,
+      );
+    } else {
+      // Si no hay GPS, mostrar una ubicación cercana pero claramente distinta
+      repartidorCoords = LatLng(
+        restauranteCoords.latitude + 0.005,
+        restauranteCoords.longitude + 0.005,
+      );
+    } // Calcular distancia
+    final distance = const Distance().as(
+      LengthUnit.Meter,
+      repartidorCoords,
+      restauranteCoords,
+    );
+
+    // Marcadores básicos
+    final markers = [
+      Marker(
+        point: restauranteCoords,
+        width: 80,
+        height: 80,
+        child: _buildCustomMarker('🏪', 'Restaurante', _colorRestaurante),
+      ),
+      Marker(
+        point: repartidorCoords,
+        width: 80,
+        height: 80,
+        child: _buildCustomMarker(
+          '🚗',
+          'Tú (${distance.toStringAsFixed(0)}m)',
+          _colorRepartidor,
+        ),
+      ),
+    ];
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text(
+          'Mapa',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        leading: widget.mostrarAtras
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: repartidorCoords, // Centrar en el repartidor
+              initialZoom: 14.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.mi_aplicacion_pizzeria',
+                subdomains: const ['a', 'b', 'c'],
+              ),
+              MarkerLayer(markers: markers),
+            ],
+          ),
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildLegendItem('🚗 Tú', Colors.orange),
+                  _buildLegendItem('🏪 Restaurante', Colors.blue),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 100,
+            child: FloatingActionButton(
+              heroTag: 'my_location',
+              onPressed: () {
+                if (_currentLocation != null) {
+                  _mapController.move(
+                    LatLng(
+                      _currentLocation!.latitude!,
+                      _currentLocation!.longitude!,
+                    ),
+                    15.0,
+                  );
+                } else {
+                  _obtenerUbicacionActual();
+                }
+              },
+              child: const Icon(Icons.my_location),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

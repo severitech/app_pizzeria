@@ -23,25 +23,51 @@ class ServicioPedidos with ChangeNotifier {
   }
 
   void _iniciarSincronizacionAutomatica() {
-    _timerSincronizacion = Timer.periodic(const Duration(seconds: 15), (timer) {
-      obtenerPedidos();
+    // OPTIMIZACIÓN: Reducir frecuencia de polling de 15s a 60s (1 minuto)
+    // Esto reduce las lecturas de Firebase de 240/hora a 60/hora
+    _timerSincronizacion = Timer.periodic(const Duration(seconds: 60), (timer) {
+      // Solo sincronizar misPedidos (los que ya aceptó el conductor)
+      // No necesitamos obtenerPedidos() constantemente
       obtenerMisPedidos();
     });
   }
 
   void _iniciarActualizacionUbicacion() {
+    // OPTIMIZACIÓN: Reducir frecuencia de 10s a 30s
+    // Esto reduce las actualizaciones de ubicación de 360/hora a 120/hora
     _timerUbicacion = Timer.periodic(const Duration(seconds: 30), (timer) {
       _actualizarUbicacionSiEsNecesario();
     });
   }
 
   void _actualizarUbicacionSiEsNecesario() {
-    final pedidosEnCamino = _misPedidos
-        .where((p) => p.estado == 'En camino')
-        .toList();
-    if (pedidosEnCamino.isNotEmpty) {
-      _apiServicios.actualizarUbicacionConductor(-17.7833, -63.1821);
+    // Solo actualizar ubicación si hay pedidos activos
+    if (_misPedidos.where((p) => p.estado != 'Entregado' && p.estado != 'Cancelado').isEmpty) {
+      print('⏸️ No hay pedidos activos - Saltando actualización de ubicación');
+      return;
     }
+    // Enviar ubicación siempre para que el backend sepa quién está más cerca
+    // Usar coordenadas simuladas o reales. Aquí simulamos movimiento o posición fija.
+    // TODO: Integrar geolocator para obtener ubicación real
+    _apiServicios.actualizarUbicacionConductor(-17.7833, -63.1821);
+  }
+  
+  // Pausar sincronización automática (útil cuando la app está en background)
+  void pausarSincronizacion() {
+    _timerSincronizacion?.cancel();
+    _timerUbicacion?.cancel();
+    print('⏸️ Sincronización pausada');
+  }
+  
+  // Reanudar sincronización automática
+  void reanudarSincronizacion() {
+    if (_timerSincronizacion?.isActive != true) {
+      _iniciarSincronizacionAutomatica();
+    }
+    if (_timerUbicacion?.isActive != true) {
+      _iniciarActualizacionUbicacion();
+    }
+    print('▶️ Sincronización reanudada');
   }
 
   Future<void> obtenerPedidos() async {
@@ -90,12 +116,30 @@ class ServicioPedidos with ChangeNotifier {
       }
 
       misPedidosActualizados.sort((a, b) => b.fecha.compareTo(a.fecha));
-      _misPedidos.clear();
-      _misPedidos.addAll(misPedidosActualizados);
-      notifyListeners();
+      
+      // Solo notificar si hay cambios reales
+      if (_hayaCambiosEnMisPedidos(misPedidosActualizados)) {
+        _misPedidos.clear();
+        _misPedidos.addAll(misPedidosActualizados);
+        notifyListeners();
+        print('🔄 Mis pedidos actualizados - Notificando cambios');
+      }
     } catch (error) {
       print('❌ Error obteniendo mis pedidos: $error');
     }
+  }
+  
+  bool _hayaCambiosEnMisPedidos(List<Pedido> nuevos) {
+    if (_misPedidos.length != nuevos.length) return true;
+    
+    for (int i = 0; i < _misPedidos.length; i++) {
+      if (_misPedidos[i].id != nuevos[i].id || 
+          _misPedidos[i].estado != nuevos[i].estado) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   // MÉTODO NUEVO: Obtener pedido por ID
@@ -194,10 +238,10 @@ class ServicioPedidos with ChangeNotifier {
           _misPedidos[indice] = _misPedidos[indice].copyWith(
             estado: 'Entregado',
           );
-          
+
           // Forzar actualización
           obtenerMisPedidos();
-          
+
           notifyListeners();
         }
         return true;

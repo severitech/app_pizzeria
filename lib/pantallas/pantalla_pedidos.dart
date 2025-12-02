@@ -3,8 +3,11 @@ import 'package:mi_aplicacion_pizzeria/modelos/pedido.dart';
 import 'package:mi_aplicacion_pizzeria/servicios/servicio_pedido.dart';
 import 'package:provider/provider.dart';
 import 'pantalla_mapa.dart';
+import 'pantalla_estadisticas.dart';
 
 class PantallaPedidos extends StatefulWidget {
+  const PantallaPedidos({super.key});
+
   @override
   State<PantallaPedidos> createState() => _PantallaPedidosState();
 }
@@ -175,7 +178,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: Colors.white, size: 20),
@@ -240,6 +243,179 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
     return '${fechaLaPaz.hour.toString().padLeft(2, '0')}:${fechaLaPaz.minute.toString().padLeft(2, '0')}';
   }
 
+  String _formatearFechaCompleta(DateTime fecha) {
+    final fechaLaPaz = fecha.isUtc
+        ? fecha.add(const Duration(hours: -4))
+        : fecha;
+    final meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${fechaLaPaz.day} ${meses[fechaLaPaz.month - 1]} ${fechaLaPaz.year} ${fechaLaPaz.hour.toString().padLeft(2, '0')}:${fechaLaPaz.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _calcularTiempoTranscurrido(DateTime fecha) {
+    final ahora = DateTime.now();
+    final diferencia = ahora.difference(fecha);
+
+    if (diferencia.inSeconds < 60) {
+      return 'Hace ${diferencia.inSeconds}s';
+    } else if (diferencia.inMinutes < 60) {
+      return 'Hace ${diferencia.inMinutes}min';
+    } else if (diferencia.inHours < 24) {
+      return 'Hace ${diferencia.inHours}h';
+    } else if (diferencia.inDays < 7) {
+      return 'Hace ${diferencia.inDays}d';
+    } else {
+      return 'Hace ${(diferencia.inDays / 7).floor()}sem';
+    }
+  }
+
+  // Helper para obtener ID corto de forma segura
+  String _obtenerIdCorto(String id) {
+    if (id.isEmpty) return 'Sin ID';
+    if (id.length <= 6) return id;
+    return id.substring(id.length - 6);
+  }
+
+  // Widget para mostrar las calificaciones del cliente
+  Widget _buildCalificacionDisplay(Pedido pedido) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.amber.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.star_rounded,
+                color: Colors.amber,
+                size: 20,
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                'Calificación del Cliente',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF424242),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Calificación del delivery
+          if (pedido.deliveryRating != null) ...[
+            Row(
+              children: [
+                const Text(
+                  'Delivery: ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF616161),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                ...List.generate(5, (index) {
+                  return Icon(
+                    index < pedido.deliveryRating!
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: Colors.amber[700],
+                    size: 18,
+                  );
+                }),
+                const SizedBox(width: 6),
+                Text(
+                  '${pedido.deliveryRating}/5',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.amber[800],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // Calificación del restaurante
+          if (pedido.restaurantRating != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Text(
+                  'Restaurante: ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF616161),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                ...List.generate(5, (index) {
+                  return Icon(
+                    index < pedido.restaurantRating!
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: Colors.amber[700],
+                    size: 18,
+                  );
+                }),
+                const SizedBox(width: 6),
+                Text(
+                  '${pedido.restaurantRating}/5',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.amber[800],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // Comentario del cliente
+          if (pedido.comment != null && pedido.comment!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 14,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      pedido.comment!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildBotonesAccion(
     Pedido pedido,
     ServicioPedidos servicioPedidos,
@@ -277,12 +453,13 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                     await _mostrarDialogoConfirmacion(
                       context,
                       'Enviar Pedido',
-                      '¿Estás en camino para entregar el pedido #${pedido.id.substring(pedido.id.length - 6)}?',
+                      '¿Estás en camino para entregar el pedido #${_obtenerIdCorto(pedido.id)}?',
                       () async {
                         _mostrarLoading(context, 'Actualizando estado...');
                         final exito = await servicioPedidos.enviarPedido(
                           pedido.id,
                         );
+                        if (!mounted) return;
                         Navigator.of(context, rootNavigator: true).pop();
 
                         if (mounted) {
@@ -290,7 +467,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  '🚚 Pedido #${pedido.id.substring(pedido.id.length - 6)} en camino',
+                                  '🚚 Pedido #${_obtenerIdCorto(pedido.id)} en camino',
                                 ),
                                 backgroundColor: Colors.orange,
                                 duration: const Duration(seconds: 3),
@@ -339,12 +516,13 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                     await _mostrarDialogoConfirmacion(
                       context,
                       'Entregar Pedido',
-                      '¿Has entregado el pedido #${pedido.id.substring(pedido.id.length - 6)} al cliente?',
+                      '¿Has entregado el pedido #${_obtenerIdCorto(pedido.id)} al cliente?',
                       () async {
                         _mostrarLoading(context, 'Actualizando estado...');
                         final exito = await servicioPedidos.entregarPedido(
                           pedido.id,
                         );
+                        if (!mounted) return;
                         Navigator.of(context, rootNavigator: true).pop();
 
                         if (mounted) {
@@ -352,7 +530,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  '✅ Pedido #${pedido.id.substring(pedido.id.length - 6)} entregado',
+                                  '✅ Pedido #${_obtenerIdCorto(pedido.id)} entregado',
                                 ),
                                 backgroundColor: Colors.green,
                                 duration: const Duration(seconds: 3),
@@ -403,12 +581,13 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                 await _mostrarDialogoConfirmacion(
                   context,
                   'Asignar Conductor',
-                  '¿Quieres asignarte como conductor del pedido #${pedido.id.substring(pedido.id.length - 6)}?',
+                  '¿Quieres asignarte como conductor del pedido #${_obtenerIdCorto(pedido.id)}?',
                   () async {
                     _mostrarLoading(context, 'Asignando conductor...');
                     final exito = await servicioPedidos.asignarConductor(
                       pedido.id,
                     );
+                    if (!mounted) return;
                     Navigator.of(context, rootNavigator: true).pop();
 
                     if (mounted) {
@@ -416,7 +595,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              '✅ Pedido #${pedido.id.substring(pedido.id.length - 6)} asignado',
+                              '✅ Pedido #${_obtenerIdCorto(pedido.id)} asignado',
                             ),
                             backgroundColor: Colors.purple,
                             duration: const Duration(seconds: 3),
@@ -429,11 +608,15 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('❌ Error al asignar pedido'),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 3),
+                            content: Text(
+                              '⚠️ No se pudo asignar. Es posible que otro conductor ya lo haya tomado.',
+                            ),
+                            backgroundColor: Colors.orange,
+                            duration: const Duration(seconds: 4),
                           ),
                         );
+                        // Recargar lista para ver si desaparece
+                        servicioPedidos.obtenerPedidos();
                       }
                     }
                   },
@@ -454,6 +637,13 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
     final pedidos = _indiceVista == 0
         ? servicioPedidos.pedidos
         : servicioPedidos.misPedidos;
+
+    // DEBUG: Mostrar información en consola
+    print('📊 Vista: ${_indiceVista == 0 ? "Disponibles" : "Mis Pedidos"}');
+    print('📦 Total pedidos en lista: ${pedidos.length}');
+    if (_indiceVista == 1) {
+      print('🚗 Mis pedidos: ${servicioPedidos.misPedidos.map((p) => '${p.id.substring(p.id.length - 6)} - ${p.estado}').join(", ")}');
+    }
 
     // Verificar nuevos pedidos cuando se actualiza la lista
     if (pedidos.isNotEmpty && _indiceVista == 0) {
@@ -509,6 +699,22 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
           ),
         ),
         actions: [
+          // Botón de estadísticas (solo visible en "Mis Pedidos")
+          if (_indiceVista == 1)
+            IconButton(
+              icon: const Icon(Icons.bar_chart_rounded, color: Colors.white),
+              tooltip: 'Ver Estadísticas',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PantallaEstadisticas(
+                      pedidos: servicioPedidos.misPedidos,
+                    ),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
@@ -528,7 +734,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                     onPressed: () => setState(() => _indiceVista = 0),
                     style: TextButton.styleFrom(
                       backgroundColor: _indiceVista == 0
-                          ? Colors.white.withOpacity(0.2)
+                          ? Colors.white.withValues(alpha: 0.2)
                           : Colors.transparent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
@@ -551,7 +757,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                     onPressed: () => setState(() => _indiceVista = 1),
                     style: TextButton.styleFrom(
                       backgroundColor: _indiceVista == 1
-                          ? Colors.white.withOpacity(0.2)
+                          ? Colors.white.withValues(alpha: 0.2)
                           : Colors.transparent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
@@ -721,16 +927,36 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
               child: servicioPedidos.estaCargando && pedidos.isEmpty
                   ? const Center(child: CircularProgressIndicator())
                   : pedidosFiltrados.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.list_alt, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text(
-                            'No hay pedidos disponibles',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                          Icon(
+                            _indiceVista == 0 ? Icons.list_alt : Icons.delivery_dining,
+                            size: 64,
+                            color: Colors.grey,
                           ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _indiceVista == 0
+                                ? 'No hay pedidos disponibles'
+                                : 'No has aceptado pedidos aún',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (_indiceVista == 1) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Ve a "Disponibles" para aceptar pedidos',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     )
@@ -757,30 +983,56 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                             duration: const Duration(milliseconds: 500),
                             curve: Curves.easeInOut,
                             margin: const EdgeInsets.symmetric(vertical: 8),
-                            child: Card(
-                              elevation: 8,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              shadowColor: Colors.black26,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(20),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          PantallaMapa(pedidoId: pedido.id),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Badge de fecha de aceptación (solo en Mis Pedidos)
+                                if (_indiceVista == 1)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Aceptado: ${_formatearFechaCompleta(pedido.fecha)}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[600],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20.0),
-                                  child: Column(
-                                    children: [
-                                      Row(
+                                  ),
+                                Card(
+                                  elevation: 8,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  shadowColor: Colors.black26,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(20),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              PantallaMapa(pedidoId: pedido.id),
+                                        ),
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(20.0),
+                                      child: Column(
                                         children: [
-                                          // Icono de estado
+                                          Row(
+                                            children: [
+                                              // Icono de estado
                                           Container(
                                             width: 60,
                                             height: 60,
@@ -788,7 +1040,9 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                               gradient: LinearGradient(
                                                 colors: [
                                                   estadoColor,
-                                                  estadoColor.withOpacity(0.7),
+                                                  estadoColor.withValues(
+                                                    alpha: 0.7,
+                                                  ),
                                                 ],
                                                 begin: Alignment.topLeft,
                                                 end: Alignment.bottomRight,
@@ -796,8 +1050,9 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                               shape: BoxShape.circle,
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: estadoColor
-                                                      .withOpacity(0.3),
+                                                  color: estadoColor.withValues(
+                                                    alpha: 0.3,
+                                                  ),
                                                   blurRadius: 10,
                                                   offset: const Offset(0, 4),
                                                 ),
@@ -824,7 +1079,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                                   children: [
                                                     Expanded(
                                                       child: Text(
-                                                        'Pedido #${pedido.id.substring(pedido.id.length - 6)}',
+                                                        'Pedido #${_obtenerIdCorto(pedido.id)}',
                                                         style: const TextStyle(
                                                           fontSize: 18,
                                                           fontWeight:
@@ -846,14 +1101,18 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                                           ),
                                                       decoration: BoxDecoration(
                                                         color: prioridadColor
-                                                            .withOpacity(0.1),
+                                                            .withValues(
+                                                              alpha: 0.1,
+                                                            ),
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               12,
                                                             ),
                                                         border: Border.all(
                                                           color: prioridadColor
-                                                              .withOpacity(0.3),
+                                                              .withValues(
+                                                                alpha: 0.3,
+                                                              ),
                                                         ),
                                                       ),
                                                       child: Text(
@@ -962,6 +1221,28 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                                         const SizedBox(
                                                           height: 4,
                                                         ),
+                                                        // Mostrar información de aceptación en Mis Pedidos
+                                                        if (_indiceVista == 1) ...[
+                                                          Row(
+                                                            children: [
+                                                              Icon(
+                                                                Icons.check_circle_outline,
+                                                                color: Colors.green[600],
+                                                                size: 14,
+                                                              ),
+                                                              const SizedBox(width: 4),
+                                                              Text(
+                                                                _calcularTiempoTranscurrido(pedido.fecha),
+                                                                style: TextStyle(
+                                                                  color: Colors.green[700],
+                                                                  fontSize: 12,
+                                                                  fontWeight: FontWeight.w600,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          const SizedBox(height: 4),
+                                                        ],
                                                         Text(
                                                           '${pedido.moneda} ${pedido.total.toStringAsFixed(2)}',
                                                           style:
@@ -984,7 +1265,9 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                                           ),
                                                       decoration: BoxDecoration(
                                                         color: estadoColor
-                                                            .withOpacity(0.1),
+                                                            .withValues(
+                                                              alpha: 0.1,
+                                                            ),
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               15,
@@ -1007,6 +1290,11 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                           ),
                                         ],
                                       ),
+                                      // Mostrar calificaciones si el pedido está entregado y tiene calificación
+                                      if (_indiceVista == 1 && 
+                                          pedido.estado == 'Entregado' && 
+                                          pedido.deliveryRating != null)
+                                        _buildCalificacionDisplay(pedido),
                                       // Botones de acción
                                       _buildBotonesAccion(
                                         pedido,
@@ -1017,6 +1305,8 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                   ),
                                 ),
                               ),
+                            ),
+                              ],
                             ),
                           );
                         },

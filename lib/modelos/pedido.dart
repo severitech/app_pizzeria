@@ -9,6 +9,10 @@ class Pedido {
   final String estado;
   final String moneda;
   final bool estaCalificado;
+  final Map<String, dynamic>? restaurantLocation;
+  final int? restaurantRating;  // Calificación del restaurante (1-5)
+  final int? deliveryRating;     // Calificación del delivery (1-5)
+  final String? comment;          // Comentario opcional
 
   Pedido({
     required this.id,
@@ -21,6 +25,10 @@ class Pedido {
     required this.estado,
     required this.moneda,
     required this.estaCalificado,
+    this.restaurantLocation,
+    this.restaurantRating,
+    this.deliveryRating,
+    this.comment,
   });
 
   factory Pedido.vacio() {
@@ -60,6 +68,16 @@ class Pedido {
       estado: json['status']?.toString() ?? 'Pendiente',
       moneda: json['currency']?.toString() ?? 'Bs',
       estaCalificado: json['isRated'] == true,
+      restaurantLocation: json['restaurant_location'] is Map
+          ? Map<String, dynamic>.from(json['restaurant_location'])
+          : null,
+      restaurantRating: json['restaurant_rating'] is int 
+          ? json['restaurant_rating'] 
+          : (json['restaurant_rating'] != null ? int.tryParse(json['restaurant_rating'].toString()) : null),
+      deliveryRating: json['delivery_rating'] is int 
+          ? json['delivery_rating'] 
+          : (json['delivery_rating'] != null ? int.tryParse(json['delivery_rating'].toString()) : null),
+      comment: json['comment']?.toString(),
     );
   }
 
@@ -100,6 +118,7 @@ class Pedido {
       estado: estado ?? this.estado,
       moneda: moneda,
       estaCalificado: estaCalificado ?? this.estaCalificado,
+      restaurantLocation: restaurantLocation,
     );
   }
 }
