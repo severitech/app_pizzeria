@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -56,6 +57,12 @@ class _PantallaMapaState extends State<PantallaMapa> {
     _obtenerUbicacionActual();
     _initializeMap();
     _iniciarActualizacionPeriodicaUbicacion();
+    
+    // Registrar callback para notificaciones de nuevos pedidos
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final servicio = Provider.of<ServicioPedidos>(context, listen: false);
+      servicio.agregarListenerNuevoPedido(_mostrarNotificacionNuevoPedido);
+    });
   }
 
   @override
@@ -94,47 +101,171 @@ class _PantallaMapaState extends State<PantallaMapa> {
     return id.substring(id.length - 6);
   }
 
+  void _mostrarNotificacionNuevoPedido(Pedido pedido) {
+    if (!mounted) return;
+    
+    // Mostrar diálogo de notificación
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF667eea),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.delivery_dining, color: Colors.white, size: 32),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  '¡Nuevo Pedido Asignado!',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Se te ha asignado un nuevo pedido automáticamente:',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pedido #${pedido.id.length > 8 ? pedido.id.substring(pedido.id.length - 8) : pedido.id}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Total: Bs ${pedido.total.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                    ),
+                    Text(
+                      'Dirección: ${pedido.direccion}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white70,
+              ),
+              child: const Text('Ver después'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Si ya estamos en el mapa, simplemente reconstruir con el nuevo pedido
+                if (widget.pedidoId == null || widget.pedidoId != pedido.id) {
+                  // Navegar al mapa con el pedido específico
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PantallaMapa(
+                        pedidoId: pedido.id,
+                        mostrarAtras: true,
+                      ),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF667eea),
+              ),
+              child: const Text('Ver en Mapa'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _obtenerUbicacionActual() async {
+    // En web, no intentar obtener ubicación GPS (causa errores)
+    if (kIsWeb) {
+      print('⚠️ Ejecutando en web - GPS deshabilitado, usando FakeGPS o ubicación por defecto');
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+    
     bool serviceEnabled;
     PermissionStatus permissionGranted;
 
-    serviceEnabled = await _locationService.serviceEnabled();
-    if (!serviceEnabled) {
-      serviceEnabled = await _locationService.requestService();
+    try {
+      serviceEnabled = await _locationService.serviceEnabled();
       if (!serviceEnabled) {
-        return;
+        serviceEnabled = await _locationService.requestService();
+        if (!serviceEnabled) {
+          return;
+        }
       }
-    }
 
-    permissionGranted = await _locationService.hasPermission();
-    if (permissionGranted == PermissionStatus.denied) {
-      permissionGranted = await _locationService.requestPermission();
-      if (permissionGranted != PermissionStatus.granted) {
-        return;
+      permissionGranted = await _locationService.hasPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        permissionGranted = await _locationService.requestPermission();
+        if (permissionGranted != PermissionStatus.granted) {
+          return;
+        }
       }
-    }
 
-    final locationData = await _locationService.getLocation();
-    if (mounted) {
-      // SOLO actualizar _currentLocation si FakeGPS NO está activo
-      if (!_modoFakeGPSActivo) {
-        _currentLocation = locationData;
+      final locationData = await _locationService.getLocation();
+      if (mounted) {
+        // SOLO actualizar _currentLocation si FakeGPS NO está activo
+        if (!_modoFakeGPSActivo) {
+          _currentLocation = locationData;
+        }
+        // Si estamos en modo genérico (sin pedido), actualizar el mapa UNA SOLA VEZ
+        if (widget.pedidoId == null && _isLoading) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
-      // Si estamos en modo genérico (sin pedido), actualizar el mapa UNA SOLA VEZ
-      if (widget.pedidoId == null && _isLoading) {
+
+      // Escuchar cambios de ubicación pero NO reconstruir el widget cada vez
+      _locationService.onLocationChanged.listen((LocationData currentLocation) {
+        if (mounted && !_modoFakeGPSActivo) {
+          // SOLO actualizar si FakeGPS NO está activo
+          _currentLocation = currentLocation; // Solo actualizar la variable, sin setState
+        }
+      });
+    } catch (e) {
+      print('❌ Error al obtener ubicación GPS: $e');
+      if (mounted && _isLoading) {
         setState(() {
           _isLoading = false;
         });
       }
     }
-
-    // Escuchar cambios de ubicación pero NO reconstruir el widget cada vez
-    _locationService.onLocationChanged.listen((LocationData currentLocation) {
-      if (mounted && !_modoFakeGPSActivo) {
-        // SOLO actualizar si FakeGPS NO está activo
-        _currentLocation = currentLocation; // Solo actualizar la variable, sin setState
-      }
-    });
   }
 
   void _initializeMap() {
@@ -470,7 +601,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
   }
 
   /// Activar/desactivar modo FakeGPS interactivo
-  void _alternarModoFakeGPS() {
+  void _alternarModoFakeGPS() async {
     setState(() {
       _modoFakeGPSActivo = !_modoFakeGPSActivo;
     });
@@ -485,6 +616,20 @@ class _PantallaMapaState extends State<PantallaMapa> {
           duration: const Duration(seconds: 3),
         ),
       );
+      
+      // Enviar ubicación actual inmediatamente al activar FakeGPS
+      if (_simulatedLocation != null) {
+        try {
+          final apiServicios = ApiServicios();
+          await apiServicios.actualizarUbicacionConductor(
+            _simulatedLocation!.latitude,
+            _simulatedLocation!.longitude,
+          );
+          print('📍 FakeGPS activado - Ubicación enviada: ${_simulatedLocation!.latitude}, ${_simulatedLocation!.longitude}');
+        } catch (error) {
+          print('❌ Error al enviar ubicación FakeGPS: $error');
+        }
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -548,25 +693,29 @@ class _PantallaMapaState extends State<PantallaMapa> {
       try {
         final apiServicios = ApiServicios();
         LatLng ubicacionAEnviar;
+        String fuente;
         
         // Usar FakeGPS si está activo, sino usar ubicación real
         if (_simulatedLocation != null) {
           ubicacionAEnviar = _simulatedLocation!;
+          fuente = 'FakeGPS';
         } else if (_currentLocation != null) {
           ubicacionAEnviar = LatLng(
             _currentLocation!.latitude!,
             _currentLocation!.longitude!,
           );
+          fuente = 'GPS Real';
         } else {
           // Si no hay ubicación, usar ubicación del restaurante por defecto
           ubicacionAEnviar = _restauranteMapCoords;
+          fuente = 'Restaurante (default)';
         }
         
         await apiServicios.actualizarUbicacionConductor(
           ubicacionAEnviar.latitude,
           ubicacionAEnviar.longitude,
         );
-        print('✅ Ubicación actualizada periódicamente: ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
+        print('✅ Ubicación actualizada periódicamente ($fuente): ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
       } catch (error) {
         print('❌ Error al actualizar ubicación periódica: $error');
       }
@@ -576,15 +725,25 @@ class _PantallaMapaState extends State<PantallaMapa> {
     Future.delayed(const Duration(seconds: 2), () async {
       try {
         final apiServicios = ApiServicios();
-        LatLng ubicacionAEnviar = _simulatedLocation ?? 
-                                 (_currentLocation != null 
-                                   ? LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!)
-                                   : _restauranteMapCoords);
+        LatLng ubicacionAEnviar;
+        String fuente;
+        
+        if (_simulatedLocation != null) {
+          ubicacionAEnviar = _simulatedLocation!;
+          fuente = 'FakeGPS';
+        } else if (_currentLocation != null) {
+          ubicacionAEnviar = LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!);
+          fuente = 'GPS Real';
+        } else {
+          ubicacionAEnviar = _restauranteMapCoords;
+          fuente = 'Restaurante (default)';
+        }
+        
         await apiServicios.actualizarUbicacionConductor(
           ubicacionAEnviar.latitude,
           ubicacionAEnviar.longitude,
         );
-        print('✅ Ubicación inicial enviada: ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
+        print('✅ Ubicación inicial enviada ($fuente): ${ubicacionAEnviar.latitude}, ${ubicacionAEnviar.longitude}');
       } catch (error) {
         print('❌ Error al enviar ubicación inicial: $error');
       }
@@ -594,6 +753,13 @@ class _PantallaMapaState extends State<PantallaMapa> {
   @override
   void dispose() {
     _timerActualizacionUbicacion?.cancel();
+    // Remover callback al destruir el widget
+    try {
+      final servicio = Provider.of<ServicioPedidos>(context, listen: false);
+      servicio.removerListenerNuevoPedido(_mostrarNotificacionNuevoPedido);
+    } catch (e) {
+      // Ignorar error si el provider ya no existe
+    }
     super.dispose();
   }
 

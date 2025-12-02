@@ -13,6 +13,22 @@ class ServicioPedidos with ChangeNotifier {
   Timer? _timerUbicacion;
   bool _estaCargando = false;
   String? _ultimoError;
+  
+  // Lista de callbacks para notificar nuevos pedidos asignados (soporta múltiples listeners)
+  final List<Function(Pedido)> _nuevoPedidoCallbacks = [];
+  final Set<String> _pedidosNotificados = {};
+  
+  // Método para agregar callback
+  void agregarListenerNuevoPedido(Function(Pedido) callback) {
+    if (!_nuevoPedidoCallbacks.contains(callback)) {
+      _nuevoPedidoCallbacks.add(callback);
+    }
+  }
+  
+  // Método para remover callback
+  void removerListenerNuevoPedido(Function(Pedido) callback) {
+    _nuevoPedidoCallbacks.remove(callback);
+  }
 
   List<Pedido> get pedidos => _pedidos;
   List<Pedido> get misPedidos => _misPedidos;
@@ -25,11 +41,10 @@ class ServicioPedidos with ChangeNotifier {
   }
 
   void _iniciarSincronizacionAutomatica() {
-    // OPTIMIZACIÓN: Reducir frecuencia de polling de 15s a 60s (1 minuto)
-    // Esto reduce las lecturas de Firebase de 240/hora a 60/hora
-    _timerSincronizacion = Timer.periodic(const Duration(seconds: 60), (timer) {
-      // Solo sincronizar misPedidos (los que ya aceptó el conductor)
-      // No necesitamos obtenerPedidos() constantemente
+    // Polling rápido para detectar pedidos asignados automáticamente
+    // Intervalo de 5 segundos para notificación casi instantánea
+    _timerSincronizacion = Timer.periodic(const Duration(seconds: 5), (timer) {
+      // Sincronizar misPedidos para detectar asignaciones automáticas
       obtenerMisPedidos();
     });
   }
@@ -115,10 +130,33 @@ class ServicioPedidos with ChangeNotifier {
 
       // Solo notificar si hay cambios reales
       if (_hayaCambiosEnMisPedidos(misPedidosActualizados)) {
+        // Detectar nuevos pedidos asignados
+        final nuevosAsignados = misPedidosActualizados.where((nuevo) {
+          final esNuevo = !_misPedidos.any((viejo) => viejo.id == nuevo.id);
+          final esAsignado = nuevo.estado == 'Repartidor Asignado';
+          final noNotificado = !_pedidosNotificados.contains(nuevo.id);
+          return esNuevo && esAsignado && noNotificado;
+        }).toList();
+        
         _misPedidos.clear();
         _misPedidos.addAll(misPedidosActualizados);
         notifyListeners();
         print('🔄 Mis pedidos actualizados - Notificando cambios');
+        
+        // Notificar cada nuevo pedido asignado a TODOS los listeners
+        for (var pedido in nuevosAsignados) {
+          _pedidosNotificados.add(pedido.id);
+          print('🔔 Nuevo pedido asignado detectado: ${pedido.id}');
+          
+          // Notificar a todos los callbacks registrados
+          for (var callback in _nuevoPedidoCallbacks) {
+            try {
+              callback(pedido);
+            } catch (e) {
+              print('❌ Error al ejecutar callback de nuevo pedido: $e');
+            }
+          }
+        }
       }
     } catch (error) {
       print('❌ Error obteniendo mis pedidos: $error');

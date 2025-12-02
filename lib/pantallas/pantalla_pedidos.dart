@@ -25,7 +25,18 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
       final servicio = Provider.of<ServicioPedidos>(context, listen: false);
       servicio.obtenerPedidos();
       servicio.obtenerMisPedidos();
+      
+      // Registrar callback para notificaciones de nuevos pedidos asignados
+      servicio.agregarListenerNuevoPedido(_mostrarNotificacionNuevoPedido);
     });
+  }
+
+  @override
+  void dispose() {
+    // Remover callback al destruir el widget
+    final servicio = Provider.of<ServicioPedidos>(context, listen: false);
+    servicio.removerListenerNuevoPedido(_mostrarNotificacionNuevoPedido);
+    super.dispose();
   }
 
   Color _getColorPorEstado(String estado) {
@@ -100,6 +111,107 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
         });
       }
     }
+  }
+
+  void _mostrarNotificacionNuevoPedido(Pedido pedido) {
+    if (!mounted) return;
+    
+    // Mostrar diálogo de notificación
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF667eea),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.delivery_dining, color: Colors.white, size: 32),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  '¡Nuevo Pedido Asignado!',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Se te ha asignado un nuevo pedido automáticamente:',
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pedido #${pedido.id.length > 8 ? pedido.id.substring(pedido.id.length - 8) : pedido.id}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Total: Bs ${pedido.total.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                    ),
+                    Text(
+                      'Dirección: ${pedido.direccion}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white70,
+              ),
+              child: const Text('Ver después'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Navegar al mapa con el pedido
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PantallaMapa(
+                      pedidoId: pedido.id,
+                      mostrarAtras: true,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF667eea),
+              ),
+              child: const Text('Ver en Mapa'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _mostrarDialogoConfirmacion(
