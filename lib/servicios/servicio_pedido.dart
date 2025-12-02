@@ -42,7 +42,9 @@ class ServicioPedidos with ChangeNotifier {
 
   void _actualizarUbicacionSiEsNecesario() {
     // Solo actualizar ubicación si hay pedidos activos
-    if (_misPedidos.where((p) => p.estado != 'Entregado' && p.estado != 'Cancelado').isEmpty) {
+    if (_misPedidos
+        .where((p) => p.estado != 'Entregado' && p.estado != 'Cancelado')
+        .isEmpty) {
       print('⏸️ No hay pedidos activos - Saltando actualización de ubicación');
       return;
     }
@@ -51,14 +53,14 @@ class ServicioPedidos with ChangeNotifier {
     // TODO: Integrar geolocator para obtener ubicación real
     _apiServicios.actualizarUbicacionConductor(-17.7833, -63.1821);
   }
-  
+
   // Pausar sincronización automática (útil cuando la app está en background)
   void pausarSincronizacion() {
     _timerSincronizacion?.cancel();
     _timerUbicacion?.cancel();
     print('⏸️ Sincronización pausada');
   }
-  
+
   // Reanudar sincronización automática
   void reanudarSincronizacion() {
     if (_timerSincronizacion?.isActive != true) {
@@ -116,7 +118,7 @@ class ServicioPedidos with ChangeNotifier {
       }
 
       misPedidosActualizados.sort((a, b) => b.fecha.compareTo(a.fecha));
-      
+
       // Solo notificar si hay cambios reales
       if (_hayaCambiosEnMisPedidos(misPedidosActualizados)) {
         _misPedidos.clear();
@@ -128,17 +130,17 @@ class ServicioPedidos with ChangeNotifier {
       print('❌ Error obteniendo mis pedidos: $error');
     }
   }
-  
+
   bool _hayaCambiosEnMisPedidos(List<Pedido> nuevos) {
     if (_misPedidos.length != nuevos.length) return true;
-    
+
     for (int i = 0; i < _misPedidos.length; i++) {
-      if (_misPedidos[i].id != nuevos[i].id || 
+      if (_misPedidos[i].id != nuevos[i].id ||
           _misPedidos[i].estado != nuevos[i].estado) {
         return true;
       }
     }
-    
+
     return false;
   }
 

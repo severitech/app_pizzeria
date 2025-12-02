@@ -128,7 +128,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
+            colors: [
+              color.withValues(alpha: 0.1),
+              color.withValues(alpha: 0.05),
+            ],
           ),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
@@ -215,9 +218,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   }
 
   PreferredSizeWidget _buildAppBarWithDriver() {
-    final color = _conductorId == 'D1' ? const Color(0xFF667eea) : const Color(0xFFFF6B6B);
-    final icon = _conductorId == 'D1' ? Icons.delivery_dining : Icons.motorcycle;
-    
+    final color = _conductorId == 'D1'
+        ? const Color(0xFF667eea)
+        : const Color(0xFFFF6B6B);
+    final icon = _conductorId == 'D1'
+        ? Icons.delivery_dining
+        : Icons.motorcycle;
+
     return AppBar(
       backgroundColor: color,
       elevation: 2,
@@ -260,11 +267,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       selector: (context, servicioPedidos) {
         // Solo reconstruir cuando cambia el ID del pedido activo
         try {
-          final pedidosActivos = servicioPedidos.misPedidos.where(
-            (p) => p.estado != 'Entregado' && 
-                   p.estado != 'Cancelado' && 
-                   p.estado != 'Pendiente',
-          ).toList();
+          final pedidosActivos = servicioPedidos.misPedidos
+              .where(
+                (p) =>
+                    p.estado != 'Entregado' &&
+                    p.estado != 'Cancelado' &&
+                    p.estado != 'Pendiente',
+              )
+              .toList();
 
           if (pedidosActivos.isNotEmpty) {
             pedidosActivos.sort((a, b) => b.fecha.compareTo(a.fecha));
@@ -279,7 +289,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         // Solo reconstruir si realmente cambió el ID del pedido
         final cambio = previous != next;
         if (cambio) {
-          print('🗺️ Pedido cambió de "$previous" a "$next" - Reconstruyendo mapa');
+          print(
+            '🗺️ Pedido cambió de "$previous" a "$next" - Reconstruyendo mapa',
+          );
         }
         return cambio;
       },

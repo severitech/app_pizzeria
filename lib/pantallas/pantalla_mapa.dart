@@ -96,7 +96,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
     // Escuchar cambios de ubicación pero NO reconstruir el widget cada vez
     _locationService.onLocationChanged.listen((LocationData currentLocation) {
       if (mounted) {
-        _currentLocation = currentLocation; // Solo actualizar la variable, sin setState
+        _currentLocation =
+            currentLocation; // Solo actualizar la variable, sin setState
       }
     });
   }
@@ -115,8 +116,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
     // Extraer coordenadas del cliente desde el campo 'location' del pedido
     LatLng clienteCoords;
-    if (pedido.ubicacion != null && 
-        pedido.ubicacion!['latitude'] != null && 
+    if (pedido.ubicacion != null &&
+        pedido.ubicacion!['latitude'] != null &&
         pedido.ubicacion!['longitude'] != null) {
       clienteCoords = LatLng(
         (pedido.ubicacion!['latitude'] as num).toDouble(),
@@ -129,8 +130,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
     // Coordenadas del restaurante (SIEMPRE usar las del backend)
     LatLng restauranteCoords;
-    if (pedido.restaurantLocation != null && 
-        pedido.restaurantLocation!['latitude'] != null && 
+    if (pedido.restaurantLocation != null &&
+        pedido.restaurantLocation!['latitude'] != null &&
         pedido.restaurantLocation!['longitude'] != null) {
       restauranteCoords = LatLng(
         (pedido.restaurantLocation!['latitude'] as num).toDouble(),
@@ -150,8 +151,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
     );
 
     // Calcular distancia al destino según el estado
-    final destino = (pedido.estado == 'Repartidor Asignado') 
-        ? restauranteCoords 
+    final destino = (pedido.estado == 'Repartidor Asignado')
+        ? restauranteCoords
         : clienteCoords;
     final distance = const Distance().as(
       LengthUnit.Meter,
@@ -196,11 +197,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
         point: repartidorCoords,
         width: 80,
         height: 80,
-        child: _buildCustomMarker(
-          '🚗',
-          labelRepartidor,
-          _colorRepartidor,
-        ),
+        child: _buildCustomMarker('🚗', labelRepartidor, _colorRepartidor),
       ),
     );
 
@@ -356,7 +353,7 @@ class _PantallaMapaState extends State<PantallaMapa> {
         isDotted: false,
       ),
     );
-    
+
     // Línea del recorrido realizado (restaurante a posición actual)
     if (repartidorPos != restaurantePos) {
       _polylines.add(
@@ -445,9 +442,9 @@ class _PantallaMapaState extends State<PantallaMapa> {
         // Solo reconstruir si cambió el pedido o su estado
         if (previous == null && next == null) return false;
         if (previous == null || next == null) return true;
-        return previous.id != next.id || 
-               previous.estado != next.estado ||
-               previous.ubicacion != next.ubicacion;
+        return previous.id != next.id ||
+            previous.estado != next.estado ||
+            previous.ubicacion != next.ubicacion;
       },
       builder: (context, pedido, child) {
         // Si no hay pedido específico, mostrar mapa genérico
@@ -460,8 +457,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
 
         // Usar las coordenadas correctas del pedido
         LatLng clienteCoords;
-        if (pedido.ubicacion != null && 
-            pedido.ubicacion!['latitude'] != null && 
+        if (pedido.ubicacion != null &&
+            pedido.ubicacion!['latitude'] != null &&
             pedido.ubicacion!['longitude'] != null) {
           clienteCoords = LatLng(
             (pedido.ubicacion!['latitude'] as num).toDouble(),
@@ -543,7 +540,10 @@ class _PantallaMapaState extends State<PantallaMapa> {
                       top: 80,
                       left: 0,
                       right: 0,
-                      child: _buildInfoCard(pedido, context.read<ServicioPedidos>()),
+                      child: _buildInfoCard(
+                        pedido,
+                        context.read<ServicioPedidos>(),
+                      ),
                     ),
                     Positioned(
                       bottom: 20,
@@ -586,8 +586,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
   Widget _buildInfoCard(Pedido pedido, ServicioPedidos servicioPedidos) {
     // Usar las MISMAS coordenadas que se usan en los marcadores
     LatLng clienteCoords;
-    if (pedido.ubicacion != null && 
-        pedido.ubicacion!['latitude'] != null && 
+    if (pedido.ubicacion != null &&
+        pedido.ubicacion!['latitude'] != null &&
         pedido.ubicacion!['longitude'] != null) {
       clienteCoords = LatLng(
         (pedido.ubicacion!['latitude'] as num).toDouble(),
@@ -598,8 +598,8 @@ class _PantallaMapaState extends State<PantallaMapa> {
     }
 
     LatLng restauranteCoords;
-    if (pedido.restaurantLocation != null && 
-        pedido.restaurantLocation!['latitude'] != null && 
+    if (pedido.restaurantLocation != null &&
+        pedido.restaurantLocation!['latitude'] != null &&
         pedido.restaurantLocation!['longitude'] != null) {
       restauranteCoords = LatLng(
         (pedido.restaurantLocation!['latitude'] as num).toDouble(),

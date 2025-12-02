@@ -247,7 +247,20 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
     final fechaLaPaz = fecha.isUtc
         ? fecha.add(const Duration(hours: -4))
         : fecha;
-    final meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    final meses = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
     return '${fechaLaPaz.day} ${meses[fechaLaPaz.month - 1]} ${fechaLaPaz.year} ${fechaLaPaz.hour.toString().padLeft(2, '0')}:${fechaLaPaz.minute.toString().padLeft(2, '0')}';
   }
 
@@ -293,11 +306,7 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.star_rounded,
-                color: Colors.amber,
-                size: 20,
-              ),
+              const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
               const SizedBox(width: 6),
               const Text(
                 'Calificación del Cliente',
@@ -642,7 +651,9 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
     print('📊 Vista: ${_indiceVista == 0 ? "Disponibles" : "Mis Pedidos"}');
     print('📦 Total pedidos en lista: ${pedidos.length}');
     if (_indiceVista == 1) {
-      print('🚗 Mis pedidos: ${servicioPedidos.misPedidos.map((p) => '${p.id.substring(p.id.length - 6)} - ${p.estado}').join(", ")}');
+      print(
+        '🚗 Mis pedidos: ${servicioPedidos.misPedidos.map((p) => '${p.id.substring(p.id.length - 6)} - ${p.estado}').join(", ")}',
+      );
     }
 
     // Verificar nuevos pedidos cuando se actualiza la lista
@@ -932,7 +943,9 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            _indiceVista == 0 ? Icons.list_alt : Icons.delivery_dining,
+                            _indiceVista == 0
+                                ? Icons.list_alt
+                                : Icons.delivery_dining,
                             size: 64,
                             color: Colors.grey,
                           ),
@@ -989,7 +1002,10 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                 // Badge de fecha de aceptación (solo en Mis Pedidos)
                                 if (_indiceVista == 1)
                                   Padding(
-                                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                                    padding: const EdgeInsets.only(
+                                      left: 4,
+                                      bottom: 4,
+                                    ),
                                     child: Row(
                                       children: [
                                         Icon(
@@ -1033,220 +1049,260 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                           Row(
                                             children: [
                                               // Icono de estado
-                                          Container(
-                                            width: 60,
-                                            height: 60,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  estadoColor,
-                                                  estadoColor.withValues(
-                                                    alpha: 0.7,
+                                              Container(
+                                                width: 60,
+                                                height: 60,
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      estadoColor,
+                                                      estadoColor.withValues(
+                                                        alpha: 0.7,
+                                                      ),
+                                                    ],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
                                                   ),
-                                                ],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: estadoColor
+                                                          .withValues(
+                                                            alpha: 0.3,
+                                                          ),
+                                                      blurRadius: 10,
+                                                      offset: const Offset(
+                                                        0,
+                                                        4,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Icon(
+                                                  _getIconPorEstado(
+                                                    pedido.estado,
+                                                  ),
+                                                  color: Colors.white,
+                                                  size: 28,
+                                                ),
                                               ),
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: estadoColor.withValues(
-                                                    alpha: 0.3,
-                                                  ),
-                                                  blurRadius: 10,
-                                                  offset: const Offset(0, 4),
-                                                ),
-                                              ],
-                                            ),
-                                            child: Icon(
-                                              _getIconPorEstado(pedido.estado),
-                                              color: Colors.white,
-                                              size: 28,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
+                                              const SizedBox(width: 16),
 
-                                          // Información del pedido
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
+                                              // Información del pedido
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        'Pedido #${_obtenerIdCorto(pedido.id)}',
-                                                        style: const TextStyle(
-                                                          fontSize: 18,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: Color(
-                                                            0xFF2D3748,
-                                                          ),
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 12,
-                                                            vertical: 4,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: prioridadColor
-                                                            .withValues(
-                                                              alpha: 0.1,
-                                                            ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                        border: Border.all(
-                                                          color: prioridadColor
-                                                              .withValues(
-                                                                alpha: 0.3,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      child: Text(
-                                                        prioridad,
-                                                        style: TextStyle(
-                                                          color: prioridadColor,
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 8),
-
-                                                // Dirección
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.location_on,
-                                                      color: Colors.grey[600],
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Expanded(
-                                                      child: Text(
-                                                        pedido.direccion,
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors.grey[700],
-                                                          fontSize: 14,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 8),
-
-                                                // Productos
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.fastfood,
-                                                      color: Colors.amber[700],
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Expanded(
-                                                      child: Text(
-                                                        _formatearProductos(
-                                                          pedido.items,
-                                                        ),
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors.grey[700],
-                                                          fontSize: 14,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 8),
-
-                                                // Hora, Total y estado
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                                    Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .spaceBetween,
                                                       children: [
-                                                        Row(
-                                                          children: [
-                                                            Icon(
-                                                              Icons.access_time,
-                                                              color: Colors
-                                                                  .blue[700],
-                                                              size: 16,
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 4,
-                                                            ),
-                                                            Text(
-                                                              _formatearHora(
-                                                                pedido.fecha,
+                                                        Expanded(
+                                                          child: Text(
+                                                            'Pedido #${_obtenerIdCorto(pedido.id)}',
+                                                            style: const TextStyle(
+                                                              fontSize: 18,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color: Color(
+                                                                0xFF2D3748,
                                                               ),
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .grey[700],
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
                                                             ),
-                                                          ],
+                                                          ),
                                                         ),
                                                         const SizedBox(
-                                                          height: 4,
+                                                          width: 8,
                                                         ),
-                                                        // Mostrar información de aceptación en Mis Pedidos
-                                                        if (_indiceVista == 1) ...[
-                                                          Row(
-                                                            children: [
-                                                              Icon(
-                                                                Icons.check_circle_outline,
-                                                                color: Colors.green[600],
-                                                                size: 14,
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 4,
                                                               ),
-                                                              const SizedBox(width: 4),
-                                                              Text(
-                                                                _calcularTiempoTranscurrido(pedido.fecha),
-                                                                style: TextStyle(
-                                                                  color: Colors.green[700],
-                                                                  fontSize: 12,
-                                                                  fontWeight: FontWeight.w600,
+                                                          decoration: BoxDecoration(
+                                                            color:
+                                                                prioridadColor
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.1,
+                                                                    ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
                                                                 ),
+                                                            border: Border.all(
+                                                              color:
+                                                                  prioridadColor
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.3,
+                                                                      ),
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            prioridad,
+                                                            style: TextStyle(
+                                                              color:
+                                                                  prioridadColor,
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+
+                                                    // Dirección
+                                                    Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.location_on,
+                                                          color:
+                                                              Colors.grey[600],
+                                                          size: 16,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            pedido.direccion,
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .grey[700],
+                                                              fontSize: 14,
+                                                            ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+
+                                                    // Productos
+                                                    Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.fastfood,
+                                                          color:
+                                                              Colors.amber[700],
+                                                          size: 16,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            _formatearProductos(
+                                                              pedido.items,
+                                                            ),
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .grey[700],
+                                                              fontSize: 14,
+                                                            ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+
+                                                    // Hora, Total y estado
+                                                    Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .spaceBetween,
+                                                      children: [
+                                                        Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                Icon(
+                                                                  Icons
+                                                                      .access_time,
+                                                                  color: Colors
+                                                                      .blue[700],
+                                                                  size: 16,
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 4,
+                                                                ),
+                                                                Text(
+                                                                  _formatearHora(
+                                                                    pedido
+                                                                        .fecha,
+                                                                  ),
+                                                                  style: TextStyle(
+                                                                    color: Colors
+                                                                        .grey[700],
+                                                                    fontSize:
+                                                                        14,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(
+                                                              height: 4,
+                                                            ),
+                                                            // Mostrar información de aceptación en Mis Pedidos
+                                                            if (_indiceVista ==
+                                                                1) ...[
+                                                              Row(
+                                                                children: [
+                                                                  Icon(
+                                                                    Icons
+                                                                        .check_circle_outline,
+                                                                    color: Colors
+                                                                        .green[600],
+                                                                    size: 14,
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 4,
+                                                                  ),
+                                                                  Text(
+                                                                    _calcularTiempoTranscurrido(
+                                                                      pedido
+                                                                          .fecha,
+                                                                    ),
+                                                                    style: TextStyle(
+                                                                      color: Colors
+                                                                          .green[700],
+                                                                      fontSize:
+                                                                          12,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                              const SizedBox(
+                                                                height: 4,
                                                               ),
                                                             ],
-                                                          ),
-                                                          const SizedBox(height: 4),
-                                                        ],
-                                                        Text(
-                                                          '${pedido.moneda} ${pedido.total.toStringAsFixed(2)}',
-                                                          style:
-                                                              const TextStyle(
+                                                            Text(
+                                                              '${pedido.moneda} ${pedido.total.toStringAsFixed(2)}',
+                                                              style: const TextStyle(
                                                                 color: Colors
                                                                     .green,
                                                                 fontSize: 14,
@@ -1254,58 +1310,60 @@ class _PantallaPedidosState extends State<PantallaPedidos> {
                                                                     FontWeight
                                                                         .bold,
                                                               ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 6,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: estadoColor
+                                                                .withValues(
+                                                                  alpha: 0.1,
+                                                                ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  15,
+                                                                ),
+                                                          ),
+                                                          child: Text(
+                                                            pedido.estado,
+                                                            style: TextStyle(
+                                                              color:
+                                                                  estadoColor,
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                          ),
                                                         ),
                                                       ],
                                                     ),
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 12,
-                                                            vertical: 6,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: estadoColor
-                                                            .withValues(
-                                                              alpha: 0.1,
-                                                            ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              15,
-                                                            ),
-                                                      ),
-                                                      child: Text(
-                                                        pedido.estado,
-                                                        style: TextStyle(
-                                                          color: estadoColor,
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                        ),
-                                                      ),
-                                                    ),
                                                   ],
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
+                                          ),
+                                          // Mostrar calificaciones si el pedido está entregado y tiene calificación
+                                          if (_indiceVista == 1 &&
+                                              pedido.estado == 'Entregado' &&
+                                              pedido.deliveryRating != null)
+                                            _buildCalificacionDisplay(pedido),
+                                          // Botones de acción
+                                          _buildBotonesAccion(
+                                            pedido,
+                                            servicioPedidos,
+                                            _indiceVista,
                                           ),
                                         ],
                                       ),
-                                      // Mostrar calificaciones si el pedido está entregado y tiene calificación
-                                      if (_indiceVista == 1 && 
-                                          pedido.estado == 'Entregado' && 
-                                          pedido.deliveryRating != null)
-                                        _buildCalificacionDisplay(pedido),
-                                      // Botones de acción
-                                      _buildBotonesAccion(
-                                        pedido,
-                                        servicioPedidos,
-                                        _indiceVista,
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
                               ],
                             ),
                           );

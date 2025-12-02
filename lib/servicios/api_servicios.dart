@@ -5,7 +5,7 @@ class ApiServicios {
   static const String _baseUrl =
       'https://bottelegramihc-production.up.railway.app';
 
-  static String _driverId = 'D2'; // Ahora no es const para poder cambiarlo
+  static String _driverId = 'D1'; // Ahora no es const para poder cambiarlo
 
   static final ApiServicios _instancia = ApiServicios._internal();
   factory ApiServicios() => _instancia;
@@ -60,6 +60,28 @@ class ApiServicios {
       if (respuesta.statusCode == 200) {
         final datos = json.decode(respuesta.body);
         print('📦 Mis pedidos: ${datos is List ? datos.length : 0} elementos');
+
+        // DEBUG: Imprimir datos crudos para verificar calificaciones
+        if (datos is List && datos.isNotEmpty) {
+          print('🔍 DEBUG - Todos los pedidos del conductor:');
+          for (var i = 0; i < datos.length; i++) {
+            final pedido = datos[i];
+            print('   Pedido ${i + 1}:');
+            print('   - ID: ${pedido['id']}');
+            print('   - Estado: ${pedido['status']}');
+            print('   - Tiene rating: ${pedido['rating'] != null}');
+            if (pedido['rating'] != null) {
+              print('   - Rating completo: ${json.encode(pedido['rating'])}');
+            }
+          }
+        } else {
+          print('⚠️ No hay pedidos asignados a este conductor');
+          print('   Asegúrate de:');
+          print('   1. Aceptar pedidos desde "Pedidos Disponibles"');
+          print('   2. Completar la entrega');
+          print('   3. Que el cliente haya calificado el pedido');
+        }
+
         return datos is List ? datos : [];
       } else {
         print('❌ Error obteniendo mis pedidos: ${respuesta.statusCode}');

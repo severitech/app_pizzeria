@@ -45,6 +45,15 @@ class Pedido {
     );
   }
   factory Pedido.desdeJson(Map<String, dynamic> json) {
+    // DEBUG: Imprimir datos de calificación si existen
+    if (json['restaurant_rating'] != null || json['delivery_rating'] != null) {
+      print('🌟 CALIFICACIÓN ENCONTRADA:');
+      print('   - restaurant_rating: ${json['restaurant_rating']}');
+      print('   - delivery_rating: ${json['delivery_rating']}');
+      print('   - comment: ${json['comment']}');
+      print('   - JSON completo: $json');
+    }
+
     // Manejar el total que puede venir como String o num
     double totalParseado = 0.0;
     if (json['total'] != null) {
@@ -71,13 +80,10 @@ class Pedido {
       restaurantLocation: json['restaurant_location'] is Map
           ? Map<String, dynamic>.from(json['restaurant_location'])
           : null,
-      restaurantRating: json['restaurant_rating'] is int 
-          ? json['restaurant_rating'] 
-          : (json['restaurant_rating'] != null ? int.tryParse(json['restaurant_rating'].toString()) : null),
-      deliveryRating: json['delivery_rating'] is int 
-          ? json['delivery_rating'] 
-          : (json['delivery_rating'] != null ? int.tryParse(json['delivery_rating'].toString()) : null),
-      comment: json['comment']?.toString(),
+      // Manejar calificaciones: pueden venir directamente o dentro de un objeto 'rating'
+      restaurantRating: _parsearCalificacion(json, 'restaurant_rating'),
+      deliveryRating: _parsearCalificacion(json, 'delivery_rating'),
+      comment: _parsearComentario(json),
     );
   }
 
@@ -106,6 +112,48 @@ class Pedido {
     return DateTime.now();
   }
 
+  // Helper para parsear calificaciones que pueden venir en diferentes formatos
+  static int? _parsearCalificacion(Map<String, dynamic> json, String campo) {
+    // Caso 1: Calificación directamente en el JSON
+    if (json[campo] != null) {
+      if (json[campo] is int) {
+        return json[campo];
+      }
+      return int.tryParse(json[campo].toString());
+    }
+    
+    // Caso 2: Calificación dentro de un objeto 'rating'
+    if (json['rating'] is Map) {
+      final rating = json['rating'] as Map<String, dynamic>;
+      if (rating[campo] != null) {
+        if (rating[campo] is int) {
+          return rating[campo];
+        }
+        return int.tryParse(rating[campo].toString());
+      }
+    }
+    
+    return null;
+  }
+
+  // Helper para parsear comentario
+  static String? _parsearComentario(Map<String, dynamic> json) {
+    // Caso 1: Comentario directamente en el JSON
+    if (json['comment'] != null) {
+      return json['comment'].toString();
+    }
+    
+    // Caso 2: Comentario dentro de un objeto 'rating'
+    if (json['rating'] is Map) {
+      final rating = json['rating'] as Map<String, dynamic>;
+      if (rating['comment'] != null) {
+        return rating['comment'].toString();
+      }
+    }
+    
+    return null;
+  }
+
   Pedido copyWith({String? estado, bool? estaCalificado}) {
     return Pedido(
       id: id,
@@ -119,6 +167,9 @@ class Pedido {
       moneda: moneda,
       estaCalificado: estaCalificado ?? this.estaCalificado,
       restaurantLocation: restaurantLocation,
+      restaurantRating: restaurantRating,  // Preservar calificaciones
+      deliveryRating: deliveryRating,       // Preservar calificaciones
+      comment: comment,                      // Preservar comentario
     );
   }
 }
